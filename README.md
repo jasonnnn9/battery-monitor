@@ -97,9 +97,10 @@ git push -u origin feature/your-feature
 
 在 GitHub 创建 Pull Request，说明改动、构建结果和实板测试情况，由另一位组员检查后合并。Issues 可用于登记功能分工和故障。
 
-## 来源与许可
+## 项目设计与开发
 
-本工程基于购入的教学项目，保留原作者 Eirc_lee 的署名注释。HAL、CMSIS、dfu-util 等第三方组件按各自附带许可使用。Maple 引导镜像来自 [STM32duino-bootloader](https://github.com/rogerclarkmelbourne/STM32duino-bootloader)。应用源码的复用及再分发授权尚需按原购买条款核对。仓库公开可见性本身不构成额外的许可授权。
+本项目由小组完成电路设计及应用代码的修改、开发与验证。小组负责系统功能设计、硬件联调，以及电池测量、显示、按键、保护和 Wi-Fi 通信等应用功能的维护。
 
-当前版本完成了 GCC 迁移、ESP8266 启动命令修复、OLED 就绪等待、源码整理和裸机链接配置修正。构建验证与实板验证应在 Pull Request 中分别记录。
+工程采用 ST HAL、CMSIS、dfu-util 等第三方组件，相关组件的版权声明和许可按各自文件保留。Maple 引导镜像来自 [STM32duino-bootloader](https://github.com/rogerclarkmelbourne/STM32duino-bootloader)。应用源码中保留的原工程署名用于记录代码来源。
 
+当前已记录的工程改动包括 GCC 迁移、ESP8266 启动命令修复、OLED 就绪等待、源码整理和裸机链接配置修正。构建验证与实板验证应在 Pull Request 中分别记录。
