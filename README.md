@@ -10,7 +10,7 @@ cd battery-monitor
 code .
 ~~~
 
-私有仓库成员需要先接受邀请，再使用自己的 GitHub 账号克隆。
+仓库公开，可通过链接查看、下载或克隆。直接推送分支需要接受协作者邀请，并使用自己的 GitHub 账号认证。
 
 ## 工具安装
 
@@ -99,6 +99,7 @@ git push -u origin feature/your-feature
 
 ## 来源与许可
 
-本工程基于购入的教学项目，保留原作者 Eirc_lee 的署名注释。HAL、CMSIS、dfu-util 等第三方组件按各自附带许可使用。Maple 引导镜像来自 [STM32duino-bootloader](https://github.com/rogerclarkmelbourne/STM32duino-bootloader)。应用源码的再分发授权尚需按原购买条款核对，仓库暂用于私有组内协作。
+本工程基于购入的教学项目，保留原作者 Eirc_lee 的署名注释。HAL、CMSIS、dfu-util 等第三方组件按各自附带许可使用。Maple 引导镜像来自 [STM32duino-bootloader](https://github.com/rogerclarkmelbourne/STM32duino-bootloader)。应用源码的复用及再分发授权尚需按原购买条款核对。仓库公开可见性本身不构成额外的许可授权。
 
 当前版本完成了 GCC 迁移、ESP8266 启动命令修复、OLED 就绪等待、源码整理和裸机链接配置修正。构建验证与实板验证应在 Pull Request 中分别记录。
+
