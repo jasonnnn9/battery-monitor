@@ -1,0 +1,42 @@
+{
+  "version": 4,
+  "configurations": [
+    {
+      "intelliSenseMode": "windows-gcc-arm",
+      "name": "STM32F103 Arm GCC",
+      "cStandard": "gnu11",
+      "defines": [
+        "USE_HAL_DRIVER",
+        "STM32F103xB"
+      ],
+      "compilerPath": "${workspaceFolder}/../.bms-debug-tools/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin/arm-none-eabi-gcc.exe",
+      "compilerArgs": ["-mcpu=cortex-m3", "-mthumb"],
+      "includePath": [
+        "${workspaceFolder}/Core/Inc",
+        "${workspaceFolder}/Drivers/STM32F1xx_HAL_Driver/Inc",
+        "${workspaceFolder}/Drivers/STM32F1xx_HAL_Driver/Inc/Legacy",
+        "${workspaceFolder}/Drivers/CMSIS/Device/ST/STM32F1xx/Include",
+        "${workspaceFolder}/Drivers/CMSIS/Include",
+        "${workspaceFolder}/system/Adc",
+        "${workspaceFolder}/system/Delay",
+        "${workspaceFolder}/system/Iic",
+        "${workspaceFolder}/system/Spi",
+        "${workspaceFolder}/system/Sys",
+        "${workspaceFolder}/system/timer",
+        "${workspaceFolder}/system/Usart",
+        "${workspaceFolder}/system/wdg",
+        "${workspaceFolder}/system/init",
+        "${workspaceFolder}/system/Flash",
+        "${workspaceFolder}/Hardware/esp8266",
+        "${workspaceFolder}/Hardware/18B20",
+        "${workspaceFolder}/Show",
+        "${workspaceFolder}/Protocol/cJSON",
+        "${workspaceFolder}/system/algorithm",
+        "${workspaceFolder}/Hardware/Ina219",
+        "${workspaceFolder}/system/keypad",
+        "${workspaceFolder}/Show/LCD1602",
+        "${workspaceFolder}/Show/SD1306"
+      ]
+    }
+  ]
+}

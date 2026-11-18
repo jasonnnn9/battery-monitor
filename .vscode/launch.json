@@ -1,0 +1,23 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "BMS: Attach via ST-LINK (SWD)",
+            "type": "cortex-debug",
+            "request": "attach",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build-gcc/Demo_f103C8T6.elf",
+            "servertype": "openocd",
+            "serverpath": "${workspaceFolder}/../.bms-debug-tools/xpack-openocd-0.12.0-7/bin/openocd.exe",
+            "armToolchainPath": "${workspaceFolder}/../.bms-debug-tools/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin",
+            "device": "STM32F103C8",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32f1x.cfg"
+            ],
+            "openOCDLaunchCommands": [
+                "adapter speed 1000"
+            ]
+        }
+    ]
+}

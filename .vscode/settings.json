@@ -1,0 +1,10 @@
+{
+    "git.ignoreLimitWarning": true,
+    "files.exclude": {
+        "**/build-gcc": true
+    },
+    "search.exclude": {
+        "**/build-gcc": true
+    },
+    "git.openRepositoryInParentFolders": "never"
+}

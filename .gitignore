@@ -1,0 +1,13 @@
+/build-gcc/
+*.o
+*.d
+*.elf
+*.axf
+*.map
+*.log
+*.tmp
+*.bak
+*.zip
+*.7z
+.DS_Store
+Thumbs.db
