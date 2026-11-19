@@ -43,9 +43,9 @@ int main(void)
         if(setn == 1)
         {
 					
-          	UsartSendReceiveData();
-						UsartReceive(); 	  
             CotorFun();
+            UsartSendReceiveData();
+            UsartReceive();
         }
         
 

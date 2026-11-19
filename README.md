@@ -66,13 +66,16 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\.vscode\build-gc
 | Core/Src/main.c | 初始化顺序与主循环 |
 | system/keypad/keypad.c | 按键、OLED 页面、阈值和报警动作 |
 | Hardware/esp8266/esp8266.c | 热点、TCP 服务和手机指令 |
-| Hardware/Ina219/Ina219.c | 电压、电流采集 |
+| system/Adc/adc.c | PB1 电池分压采样（5∶1，ADC 参考电压按 3.3 V 换算） |
+| Hardware/Ina219/Ina219.c | R100 分流电阻（0.1 Ω）电流采样及校准 |
 | Hardware/18B20/ds18b20.c | 温度传感器 |
 | Show/SD1306/SD1306.c | OLED 驱动 |
 | system/init/init.h | 继电器、蜂鸣器等引脚 |
 | .vscode/firmware-sources.psd1 | 编译源文件、宏定义和头文件路径 |
 
 新增 C 文件时同步更新 firmware-sources.psd1。调试配置使用 build-gcc/Demo_f103C8T6.elf，调试前应烧录与该 ELF 对应的固件。
+
+主界面和手机端显示电流的绝对值（mA）。电流读数无效时，OLED 显示 `ERR`，手机数据中的电流为 `-1`，并设置 `warningFlag` 的第 3 位（值 8）。此状态下负载继电器关断，读数恢复后可手动重新接通负载。
 
 ESP8266 提供 Wi-Fi 热点与 8080 端口 TCP 服务，手机端 APK 单独分发。当前保护判断及部分测量更新依赖主页面，完整的电池充放电保护尚需专项验收。
 

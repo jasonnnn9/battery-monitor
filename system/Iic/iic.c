@@ -696,59 +696,47 @@ uint8_t I2C_ReceiveByte(IIC_HardWareTypedef iic)
 
 
 
-void IIC_Write_Device_2Byte(uint8_t address,uint8_t Reg,uint8_t byte,uint16_t data,IIC_HardWareTypedef device)
+static bool I2C_SendAcknowledged(IIC_HardWareTypedef device, uint8_t value)
 {
-	uint8_t regAddr[2]={0,0};
-	uint8_t i=0;
-  /* High Byte */
-  regAddr[0] = (data >> 8) & 0xff;
-  /* Low Byte */
-  regAddr[1] = (data >> 0) & 0xff;
-	
-	I2C_Start(device);                //START
-	I2C_SendByte(device,address);     //SAD+W
-	I2C_WaitAck(device);              //SAK
-	I2C_SendByte(device,Reg); 			  //REG
-	I2C_WaitAck(device);              //SAK
-	
-	while(byte)
-	{
-		I2C_SendByte(device,regAddr[i]); 	//DATA	
-    I2C_WaitAck(device);              //SAK
-		i++;
-		byte--;
-		}		
-	 I2C_Stop(device);                 //Stop
-
+    I2C_SendByte(device, value);
+    return I2C_WaitAck(device);
 }
 
-uint8_t IIC_Read_Device_2Byte_Len(uint8_t address,uint8_t Reg,uint8_t byte,uint8_t *res,IIC_HardWareTypedef device)
+void IIC_Write_Device_2Byte(uint8_t address, uint8_t reg, uint8_t count,
+                            uint16_t data, IIC_HardWareTypedef device)
 {
-	I2C_Start(device);              //start
-	I2C_SendByte(device,address);   //SAW+D
-	I2C_WaitAck(device);            //SAK
-	I2C_SendByte(device,Reg);       //REG 	
-	I2C_WaitAck(device);            //SAK	
-	
-	I2C_Start(device);              //StartRepeat
-	I2C_SendByte(device,address+1); //SAD+R 
-	I2C_WaitAck(device);            //SAK
-	 while (byte) 
-		{
-        *res = I2C_ReceiveByte(device);
-        if(byte == 1)
-        {
-					I2C_NoAck(device);
-					I2C_Stop(device);
-        }
-        else
-        {
-					I2C_Ack(device);
-        }
-        res++;
-        byte--;
+    const uint8_t bytes[] = {(uint8_t)(data >> 8), (uint8_t)data};
+    if (count <= sizeof bytes && I2C_Start(device) &&
+        I2C_SendAcknowledged(device, address) && I2C_SendAcknowledged(device, reg))
+    {
+        for (uint8_t i = 0; i < count; ++i)
+            if (!I2C_SendAcknowledged(device, bytes[i]))
+                break;
     }
- return 0;		
+    I2C_Stop(device);
+}
+
+uint8_t IIC_Read_Device_2Byte_Len(uint8_t address, uint8_t reg, uint8_t count,
+                                  uint8_t *result, IIC_HardWareTypedef device)
+{
+    if (!I2C_Start(device) || !I2C_SendAcknowledged(device, address) ||
+        !I2C_SendAcknowledged(device, reg) || !I2C_Start(device) ||
+        !I2C_SendAcknowledged(device, address | 1u))
+    {
+        I2C_Stop(device);
+        return 1;
+    }
+
+    while (count > 0)
+    {
+        *result++ = I2C_ReceiveByte(device);
+        if (--count == 0)
+            I2C_NoAck(device);
+        else
+            I2C_Ack(device);
+    }
+    I2C_Stop(device);
+    return 0;
 }
 
 void IIC_Write_Device_Byte(uint8_t address,uint8_t Reg,uint16_t data,IIC_HardWareTypedef device)
