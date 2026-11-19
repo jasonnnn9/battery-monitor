@@ -85,7 +85,8 @@ enum {
     WARNING_HIGH_TEMP = 1u << 2,
     WARNING_CURRENT_SENSOR = 1u << 3
 };
-u8 mode = 0, warningFlag = WARNING_CURRENT_SENSOR, load = 0, led = 0;
+u8 mode = 0, load = 0, led = 0;
+volatile u8 warningFlag = WARNING_CURRENT_SENSOR;
 uint8_t temperature=25;
 uint8_t tempMax = 35;
 char display[16]; 
@@ -308,22 +309,23 @@ void CotorFun(void)
     if (setn != 1)
         return;
 
-    warningFlag = 0;
+    u8 warnings = 0;
     if (voltage < volMax)
-        warningFlag |= WARNING_LOW_VOLTAGE;
+        warnings |= WARNING_LOW_VOLTAGE;
     if (current == INA219_CURRENT_INVALID)
-        warningFlag |= WARNING_CURRENT_SENSOR;
+        warnings |= WARNING_CURRENT_SENSOR;
     else if (current > currentMax)
-        warningFlag |= WARNING_HIGH_CURRENT;
+        warnings |= WARNING_HIGH_CURRENT;
     if (temperature > tempMax)
-        warningFlag |= WARNING_HIGH_TEMP;
+        warnings |= WARNING_HIGH_TEMP;
 
+
+    warningFlag = warnings;
     if (warningFlag)
     {
         RELAY(OFF);
         load = 0;
     }
-    LED(warningFlag != 0);
     RELAY1((warningFlag & WARNING_HIGH_TEMP) != 0);
     if (warningFlag & (WARNING_LOW_VOLTAGE | WARNING_HIGH_CURRENT | WARNING_HIGH_TEMP))
         BEEP_DOING();

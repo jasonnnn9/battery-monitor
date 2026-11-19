@@ -21,7 +21,8 @@ unsigned short esp8266_cntPre = 0;
 uint16_t timeCount1 = 0;
 bool usart_send_flag=0;
 
-extern u8 mode,warningFlag,load;
+extern u8 mode,load;
+extern volatile u8 warningFlag;
 extern float voltage;
 extern float volMax;
 extern uint16_t current;

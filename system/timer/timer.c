@@ -1,6 +1,8 @@
 #include "main.h"
 #include "timer.h"
 
+extern volatile u8 warningFlag;
+
 TIM_HandleTypeDef htim1,htim2,htim3,htim4;
 uint8_t UR1_flg,UR2_flg,UR3_flg,UR4_flg;
 uint16_t timer1_flag_1;
@@ -254,6 +256,8 @@ void timer_1_handle(void)
 
 void timer_2_handle(void)
 {
+    /* Keep status feedback responsive during foreground display and UART work. */
+    LED(warningFlag == 0 || ((HAL_GetTick() / 300u) & 1u));
 	 timer2_flag_1=1;
 		KeyScan();
 }
