@@ -56,7 +56,9 @@ void UsartSendReceiveData(void)
 
 		memset(SEND_BUF, 0, sizeof(SEND_BUF));  
 
-		sprintf(SEND_BUF, "voltage%1.2f current%4d temperature%2d elQuantity%3d warningFlag%2d",voltage,current,temperature,elQuantity,warningFlag);
+		sprintf(SEND_BUF, "voltage%1.2f current%4d temperature%2d elQuantity%3d warningFlag%2d",voltage,
+                current == INA219_CURRENT_INVALID ? -1 : (int)current,
+                temperature, elQuantity, warningFlag);
 
 		ESP8266_SendData((u8 *)SEND_BUF, strlen(SEND_BUF));
 		

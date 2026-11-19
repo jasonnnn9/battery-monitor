@@ -75,11 +75,17 @@ void Keypad_Handle(void)
 
 float voltage,power;
 float volMax = 2.5;
-uint16_t current;
+uint16_t current = INA219_CURRENT_INVALID;
 uint16_t currentMax = 180;
 
 uint8_t keyNum[4],setn = 0;
-u8 mode = 0,warningFlag = 0,load = 0,led=0;
+enum {
+    WARNING_LOW_VOLTAGE = 1u << 0,
+    WARNING_HIGH_CURRENT = 1u << 1,
+    WARNING_HIGH_TEMP = 1u << 2,
+    WARNING_CURRENT_SENSOR = 1u << 3
+};
+u8 mode = 0, warningFlag = WARNING_CURRENT_SENSOR, load = 0, led = 0;
 uint8_t temperature=25;
 uint8_t tempMax = 35;
 char display[16]; 
@@ -90,7 +96,7 @@ char str[50];
 u8 elQuantity = 0; 
 void GetBatteryCapacity(void)	 
 {
-	u8 Vol;
+	uint16_t Vol;
 	Vol = (u16)(voltage * 1000) / 42;
 	if(Vol >= 100)
 		elQuantity = 100;	
@@ -193,14 +199,11 @@ u8 last_setn = 0;
 
 void Display(void)
 {
-    u16 curr;
-
     if(setn == 1)
     {
 			
 			
-			  INA219a_Init(); 
-        voltage = INA219_ReadBusVoltage(INA219_ADDRESS) / 1000.0f;
+        voltage = ADC_ReadBatteryVoltage();
 				GetBatteryCapacity();				
 				OLED_ShowStr(0, 4, (uint8_t *)"Temp:", 2, 0);
 				OLED_ShowNum(48,4,temperature,2,0);
@@ -208,7 +211,7 @@ void Display(void)
 			
         OLED_ShowStr(0, 0, (uint8_t *)"Volt:", 2, 0);
 				if(voltage < 0.1f)voltage=0;	
-				OLED_ShowFormatStr(48, 0, "%.2f", voltage);
+				OLED_ShowFormatStr(48, 0, "%-5.2f", voltage);
 			
         OLED_ShowChar(90,0,'V',2,0);
 
@@ -247,25 +250,15 @@ void Display(void)
 							
         current = INA219_ReadCurrent_mA(INA219_ADDRESS);
         OLED_ShowStr(0, 2, (uint8_t *)"Curr:", 2, 0);
-        curr = current;
-				
-					
-				if(curr != last_current || last_setn != 1)
-				{
-						 
-						OLED_ShowChar(48, 2, ' ', 2, 0);  // 32+16
-						OLED_ShowChar(58, 2, ' ', 2, 0);  // 42+16
-						OLED_ShowChar(68, 2, ' ', 2, 0);  // 52+16
+        if (current != last_current || last_setn != 1)
+        {
+            if (current == INA219_CURRENT_INVALID)
+                OLED_ShowStr(48, 2, (uint8_t *)" ERR", 2, 0);
+            else
+                OLED_ShowFormatStr(48, 2, "%4u", (unsigned)current);
+            last_current = current;
+        }
 
-						 
-						if(curr >= 100) OLED_ShowNum(48, 2, curr/100,        2, 0);
-						if(curr >= 10)  OLED_ShowNum(58, 2, (curr%100)/10,  2, 0);
-													 OLED_ShowNum(68, 2, curr%10,         2, 0);
-
-						last_current = curr;
-				}
-
-				 
 				OLED_ShowChar(80, 2, 'm', 2, 0);  // 64+16
 				OLED_ShowChar(90, 2, 'A', 2, 0);  // 74+16
 		
@@ -316,41 +309,27 @@ void DISplaysetvalue(void)
 }
 
 void CotorFun(void)
-{	
+{
+    if (setn != 1)
+        return;
 
-		if(setn == 1)
-		{
-			if(voltage < volMax)
-				{
-					BEEP_DOING();
-					RELAY(OFF);
-					LED(0);
-					OLED_ShowStr(48,0,(uint8_t *)"         ",2,0);
-					warningFlag |= (1 << 0); 
-				}else{
-					warningFlag &= ~(1 << 0); 
-				}
-				if(current > currentMax)
-				{
-					BEEP_DOING();
-					RELAY(OFF);
-					LED(0);
-					OLED_ShowStr(48,2,(uint8_t *)"          ",2,0);	
-					warningFlag |= (1 << 1); 
-				}else{
-					warningFlag &= ~(1 << 1); 
-				}
-				if(temperature > tempMax)
-				{
-					BEEP_DOING(); 
-					RELAY(OFF);
-					RELAY1(ON);
-					LED(0);
-					OLED_ShowStr(48,4,(uint8_t *)"          ",2,0);	
-					warningFlag |= (1 << 2); 
-				}else{
-					warningFlag &= ~(1 << 2); 
-					RELAY1(OFF);
-				}
-		}
+    warningFlag = 0;
+    if (voltage < volMax)
+        warningFlag |= WARNING_LOW_VOLTAGE;
+    if (current == INA219_CURRENT_INVALID)
+        warningFlag |= WARNING_CURRENT_SENSOR;
+    else if (current > currentMax)
+        warningFlag |= WARNING_HIGH_CURRENT;
+    if (temperature > tempMax)
+        warningFlag |= WARNING_HIGH_TEMP;
+
+    if (warningFlag)
+    {
+        RELAY(OFF);
+        LED(0);
+        load = 0;
+    }
+    RELAY1((warningFlag & WARNING_HIGH_TEMP) != 0);
+    if (warningFlag & (WARNING_LOW_VOLTAGE | WARNING_HIGH_CURRENT | WARNING_HIGH_TEMP))
+        BEEP_DOING();
 }

@@ -117,3 +117,9 @@ uint16_t Get_ADC_A6(void){return ADC_GetValue(ADC_CHANNEL_6);}
 uint16_t Get_ADC_A7(void){return ADC_GetValue(ADC_CHANNEL_7);}
 uint16_t Get_ADC_B0(void){return ADC_GetValue(ADC_CHANNEL_8);}
 uint16_t Get_ADC_B1(void){return ADC_GetValue(ADC_CHANNEL_9);}
+
+float ADC_ReadBatteryVoltage(void)
+{
+    /* PB1 (ADC1_IN9), 12-bit ADC, nominal 3.3 V reference and 5:1 divider. */
+    return Get_ADC_B1() * (3.3f * 5.0f / 4095.0f);
+}

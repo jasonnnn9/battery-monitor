@@ -79,6 +79,9 @@
 
 
 
+/* Magnitude in mA for the display and load limit; reserved failure value. */
+#define INA219_CURRENT_INVALID UINT16_MAX
+
 uint8_t INA219_Init(uint8_t Bddr);
 uint16_t INA219_ReadBusVoltage(uint8_t Bddr);
 uint16_t INA219_ReadCurrent_mA(uint8_t Bddr);
