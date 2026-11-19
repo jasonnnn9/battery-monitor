@@ -129,6 +129,7 @@ void key_init(void);
 uint8_t key_scan(uint8_t mode);      
 void KeyScanHandle(void);   
 void KeyScan(void); 
+void UpdateMeasurements(void);
 void Display(void);
 void DISplaysetvalue(void);
 void CotorFun(void);
