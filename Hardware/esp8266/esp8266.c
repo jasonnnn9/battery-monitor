@@ -1,6 +1,47 @@
 #include "main.h"
 #include "esp8266.h"
 
+/* Cloud firmware owns Wi-Fi; STM32 sends read-only measurement snapshots. */
+#if ESP8266_THINGER_BRIDGE
+static uint32_t cloudLastSend;
+static uint32_t cloudSequence;
+static volatile uint32_t cloudTxErrors;
+static char cloudFrame[128];
+
+extern float voltage;
+extern uint16_t current;
+extern uint8_t temperature, elQuantity, load;
+extern volatile uint8_t warningFlag;
+
+void ESP8266_Init(void)
+{
+    /* The ESP boots and reconnects independently. Do not send AT commands. */
+}
+
+void UsartSendReceiveData(void)
+{
+    uint32_t now = HAL_GetTick();
+    if ((uint32_t)(now - cloudLastSend) < 2000u)
+        return;
+    cloudLastSend = now;
+    int millivolts = (int)(voltage * 1000.0f + 0.5f);
+    int milliamps = current == INA219_CURRENT_INVALID ? -1 : (int)current;
+    /* First line also supports the earlier temperature-only ESP probe. */
+    int length = snprintf(cloudFrame, sizeof(cloudFrame),
+        "BMS,TEMP,%u\nBMS,V1,%lu,%d,%d,%u,%u,%u,%u\n",
+        (unsigned)temperature, (unsigned long)cloudSequence++, millivolts,
+        milliamps, (unsigned)temperature, (unsigned)elQuantity,
+        (unsigned)warningFlag, (unsigned)load);
+    if (length <= 0 || (size_t)length >= sizeof(cloudFrame) ||
+        HAL_UART_Transmit(&UART1_Handler, (uint8_t *)cloudFrame, (uint16_t)length, 25) != HAL_OK)
+        ++cloudTxErrors;
+}
+
+void UsartReceive(void)
+{
+    /* Cloud monitoring has no remote relay or protection-threshold commands. */
+}
+#else
 #if (USART1_ESP)
     #define ESP8266_BUF         U1Buffer
     #define ESP8266_CNT         UART1_Rx_cnt
@@ -321,3 +362,5 @@ void ESP8266_Sendmessage(uint16_t value)
     
     ESP8266_Clear();
 }
+
+#endif /* ESP8266_THINGER_BRIDGE */

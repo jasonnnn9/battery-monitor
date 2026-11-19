@@ -11,3 +11,5 @@
 *.7z
 .DS_Store
 Thumbs.db
+arduino_secrets.h
+/iot/esp01s/build/

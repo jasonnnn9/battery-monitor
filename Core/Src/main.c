@@ -42,12 +42,8 @@ int main(void)
               KeyScanHandle();
 			  Display();	
 				
-        if(setn == 1)
-        {
-					
-            UsartSendReceiveData();
-            UsartReceive();
-        }
+        UsartSendReceiveData();
+        UsartReceive();
         
 
 #if(WDT_RUN)

@@ -1,6 +1,9 @@
 #ifndef _ESP8266_H_
 #define _ESP8266_H_
 
+/* 1: custom Thinger.io ESP firmware; 0: legacy AT/phone firmware. */
+#define ESP8266_THINGER_BRIDGE 1
+
 #include "main.h"
 
 #define REV_OK		0	 
