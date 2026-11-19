@@ -107,3 +107,13 @@ git push -u origin feature/your-feature
 工程采用 ST HAL、CMSIS、dfu-util 等第三方组件，相关组件的版权声明和许可按各自文件保留。Maple 引导镜像来自 [STM32duino-bootloader](https://github.com/rogerclarkmelbourne/STM32duino-bootloader)。应用源码中保留的原工程署名用于记录代码来源。
 
 当前已记录的工程改动包括 GCC 迁移、ESP8266 启动命令修复、OLED 就绪等待、源码整理和裸机链接配置修正。构建验证与实板验证应在 Pull Request 中分别记录。
+
+## 当前测试版操作
+
+设置页中 S2 减小、S3 增大。主页面的 S3 保留手动切换负载的功能，异常时禁止接通负载。
+
+绿板 LED 表示报警状态。欠压、过流、过温或电流传感器故障时亮起，报警解除后熄灭。当前报警判断在主页面刷新，停在设置页时保持上次的报警状态。
+
+测试版通过 system/init/init.h 中的 BEEP_ENABLED=0 关闭蜂鸣器反馈及鸣叫延时。恢复声音时将其设为 1 后重新编译烧录。
+
+电量显示使用有效图标索引和固定宽度百分比，修复满电图标越界与百分号重叠。电量百分比目前仍使用原有电压换算，准确性需另行校准。

@@ -79,8 +79,8 @@ void UsartReceive(void)
 			if(warningFlag == 0)
 			{
 				load = !load;
-				if(load == 0){RELAY(OFF);LED(0);}
-				else{RELAY(ON);LED(1);}
+				if(load == 0){RELAY(OFF);}
+				else{RELAY(ON);}
 			}
 		}
 		setValue = ReceiveData_(dataPtr,"volMax:");

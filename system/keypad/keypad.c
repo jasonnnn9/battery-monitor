@@ -150,12 +150,10 @@ void KeyScanHandle(void)
 				if(load == 0)
 				{
 				RELAY(OFF);
-				LED(0);	
 				}
 				else
 				{
 				RELAY(ON);
-				LED(1);	
 				}					
 			}
 			if(setn == 2 && volMax < 25)volMax+=0.5;
@@ -323,9 +321,9 @@ void CotorFun(void)
     if (warningFlag)
     {
         RELAY(OFF);
-        LED(0);
         load = 0;
     }
+    LED(warningFlag != 0);
     RELAY1((warningFlag & WARNING_HIGH_TEMP) != 0);
     if (warningFlag & (WARNING_LOW_VOLTAGE | WARNING_HIGH_CURRENT | WARNING_HIGH_TEMP))
         BEEP_DOING();
