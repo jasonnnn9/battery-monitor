@@ -1,6 +1,8 @@
 #include "main.h"
 #include "timer.h"
 
+
+
 TIM_HandleTypeDef htim1,htim2,htim3,htim4;
 uint8_t UR1_flg,UR2_flg,UR3_flg,UR4_flg;
 uint16_t timer1_flag_1;
@@ -254,6 +256,8 @@ void timer_1_handle(void)
 
 void timer_2_handle(void)
 {
+    /* Keep alarm cadence independent of foreground display and UART work. */
+    Buzzer_Update();
 	 timer2_flag_1=1;
 		KeyScan();
 }

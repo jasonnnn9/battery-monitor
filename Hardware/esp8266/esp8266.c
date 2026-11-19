@@ -21,7 +21,8 @@ unsigned short esp8266_cntPre = 0;
 uint16_t timeCount1 = 0;
 bool usart_send_flag=0;
 
-extern u8 mode,warningFlag,load;
+extern u8 mode,load;
+extern volatile u8 warningFlag;
 extern float voltage;
 extern float volMax;
 extern uint16_t current;
@@ -79,8 +80,8 @@ void UsartReceive(void)
 			if(warningFlag == 0)
 			{
 				load = !load;
-				if(load == 0){RELAY(OFF);LED(0);}
-				else{RELAY(ON);LED(1);}
+				if(load == 0){RELAY(OFF);}
+				else{RELAY(ON);}
 			}
 		}
 		setValue = ReceiveData_(dataPtr,"volMax:");

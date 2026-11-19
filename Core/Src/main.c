@@ -37,13 +37,14 @@ int main(void)
     while (1)
     {
 			
-			  KeyScanHandle();	
+			  UpdateMeasurements();
+              CotorFun();
+              KeyScanHandle();
 			  Display();	
 				
         if(setn == 1)
         {
 					
-            CotorFun();
             UsartSendReceiveData();
             UsartReceive();
         }
