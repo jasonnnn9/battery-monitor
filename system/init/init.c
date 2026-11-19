@@ -4,6 +4,10 @@
 
 extern uint16_t speter_flag;
 
+static volatile uint8_t buzzerReady;
+static volatile uint8_t buzzerAlarm;
+static volatile uint8_t buzzerFeedbackRequested;
+
  
 //void EXTI9_5_IRQHandler(void) {
 //    if (__HAL_GPIO_EXTI_GET_IT(SPET_OUT_PIN) != RESET) {	
@@ -89,12 +93,7 @@ void GPIO_RELAY_Init(void)
 		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 		HAL_GPIO_Init(RELAY3_GPIO_PORT, &GPIO_InitStruct);
 		
-		LED_GPIO_CLK_ENABLE();
-		GPIO_InitStruct.Pin = LED_GPIO_PIN;
-		GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-		GPIO_InitStruct.Pull = GPIO_PULLUP;
-		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-		HAL_GPIO_Init(LED_GPIO_PORT, &GPIO_InitStruct);
+
 }	
 
 void GPIO_BEEP_Init(void)	
@@ -107,36 +106,63 @@ void GPIO_BEEP_Init(void)
 		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
 		BEEP(Lo);
         HAL_GPIO_Init(BEEP_GPIO_PORT, &GPIO_InitStruct);
+        buzzerReady = 1;
 }	
 
 
 void BEEP_DOING(void)
 {
-#if BEEP_ENABLED
-	BEEP(Hi);  
-	delay_ms(200);
-	BEEP(Lo); 	
-#endif
-}	
-
-void BuzzerRingsNum(u8 num) 
-{
-#if BEEP_ENABLED
-	  for(uint8_t i=0; i<num; i++)
-		{
-				BEEP(Hi);
-			  delay_ms(100);
-			 	BEEP(Lo);
-			  if(num!=1)
-				delay_ms(50);
-		}
-#else
-    (void)num;
-#endif
+    buzzerFeedbackRequested = 1;
 }
 
+void Buzzer_SetAlarm(uint8_t active)
+{
+    buzzerAlarm = (active != 0);
+}
 
+/* Called only by TIM2; foreground display/UART delays cannot stretch the pulse. */
+void Buzzer_Update(void)
+{
+    static uint8_t alarmWasActive;
+    static uint8_t feedbackActive;
+    static uint32_t alarmStarted;
+    static uint32_t feedbackStarted;
+    uint32_t now = HAL_GetTick();
+    uint8_t alarm = buzzerAlarm;
+    uint8_t output = 0;
 
+    if (!buzzerReady)
+        return;
+    if (alarm)
+    {
+        if (!alarmWasActive)
+            alarmStarted = now;
+        output = ((uint32_t)(now - alarmStarted) % 500u) < 200u;
+        feedbackActive = 0;
+        buzzerFeedbackRequested = 0;
+    }
+    else
+    {
+        if (alarmWasActive)
+            buzzerFeedbackRequested = 0;
+        if (buzzerFeedbackRequested)
+        {
+            buzzerFeedbackRequested = 0;
+            feedbackStarted = now;
+            feedbackActive = 1;
+        }
+        if (feedbackActive && (uint32_t)(now - feedbackStarted) >= 200u)
+            feedbackActive = 0;
+        output = feedbackActive;
+    }
+    alarmWasActive = alarm;
+#if BEEP_ENABLED
+    BEEP(output);
+#else
+    (void)output;
+    BEEP(Lo);
+#endif
+}
 void MX_Hard_Init(void)
 {
  

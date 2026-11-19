@@ -346,6 +346,5 @@ void CotorFun(void)
         load = 0;
     }
     RELAY1((warningFlag & WARNING_HIGH_TEMP) != 0);
-    if (warningFlag & (WARNING_LOW_VOLTAGE | WARNING_HIGH_CURRENT | WARNING_HIGH_TEMP))
-        BEEP_DOING();
+    Buzzer_SetAlarm(warningFlag & (WARNING_LOW_VOLTAGE | WARNING_HIGH_CURRENT | WARNING_HIGH_TEMP));
 }
