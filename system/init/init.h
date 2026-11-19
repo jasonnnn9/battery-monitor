@@ -2,8 +2,8 @@
 #define __INIT_h__
 #include "main.h"
 
-/* Set to 1 to enable buzzer feedback after bench testing. */
-#define BEEP_ENABLED 0
+/* Buzzer feedback can be disabled for quiet bench testing. */
+#define BEEP_ENABLED 1
 
 #define RELAY_GPIO_PORT            	 	GPIOA																			 
 #define RELAY_GPIO_PIN                GPIO_PIN_12
