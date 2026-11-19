@@ -98,7 +98,7 @@ git commit -m "Describe the change"
 git push -u origin feature/your-feature
 ~~~
 
-在 GitHub 创建 Pull Request，说明改动、构建结果和实板测试情况，由另一位组员检查后合并。Issues 可用于登记功能分工和故障。
+在 GitHub 创建 Pull Request，说明改动、构建结果和实板测试情况。main 要求任意一位有写权限的成员批准，并处理完所有审查讨论，才能合并。审核人不限于特定成员，PR 作者不能批准自己的 PR。新增提交后，先前的批准会失效，需要重新审查。main 同时禁止强制推送和删除，管理员也适用这些规则。Issues 可用于登记功能分工和故障。
 
 ## 项目设计与开发
 
