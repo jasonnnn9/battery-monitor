@@ -105,19 +105,23 @@ void GPIO_BEEP_Init(void)
 		GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 		GPIO_InitStruct.Pull = GPIO_PULLUP;
 		GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-		HAL_GPIO_Init(BEEP_GPIO_PORT, &GPIO_InitStruct);
+		BEEP(Lo);
+        HAL_GPIO_Init(BEEP_GPIO_PORT, &GPIO_InitStruct);
 }	
 
 
 void BEEP_DOING(void)
 {
+#if BEEP_ENABLED
 	BEEP(Hi);  
 	delay_ms(200);
 	BEEP(Lo); 	
+#endif
 }	
 
 void BuzzerRingsNum(u8 num) 
 {
+#if BEEP_ENABLED
 	  for(uint8_t i=0; i<num; i++)
 		{
 				BEEP(Hi);
@@ -126,6 +130,9 @@ void BuzzerRingsNum(u8 num)
 			  if(num!=1)
 				delay_ms(50);
 		}
+#else
+    (void)num;
+#endif
 }
 
 

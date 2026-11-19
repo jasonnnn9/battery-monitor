@@ -2,6 +2,9 @@
 #define __INIT_h__
 #include "main.h"
 
+/* Set to 1 to enable buzzer feedback after bench testing. */
+#define BEEP_ENABLED 0
+
 #define RELAY_GPIO_PORT            	 	GPIOA																			 
 #define RELAY_GPIO_PIN                GPIO_PIN_12
 #define RELAY_GPIO_CLK_ENABLE()       do{ __HAL_RCC_GPIOA_CLK_ENABLE(); }while(0) 

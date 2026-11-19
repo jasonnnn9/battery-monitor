@@ -131,9 +131,9 @@ void KeyScanHandle(void)
 		HAL_Delay(100);
 		if(keyNum[1] == 1)
 		{
-			if(setn == 2 && volMax < 25)volMax+=0.5;
-			if(setn == 3 && currentMax< 3200)currentMax+=10;
-			if(setn == 4 && tempMax < 99)tempMax++;
+			if(setn == 2 && volMax > 0.5)volMax-=0.5;
+			if(setn == 3 && currentMax > 10)currentMax-=10;
+			if(setn == 4 && tempMax > 0)tempMax--;
 			DISplaysetvalue();    
 			keyNum[1] = 0;
 		}
@@ -158,9 +158,9 @@ void KeyScanHandle(void)
 				LED(1);	
 				}					
 			}
-			if(setn == 2 && volMax > 0.5)volMax-=0.5;
-			if(setn == 3 && currentMax > 10)currentMax-=10;
-			if(setn == 4 && tempMax > 0)tempMax--;
+			if(setn == 2 && volMax < 25)volMax+=0.5;
+			if(setn == 3 && currentMax < 3200)currentMax+=10;
+			if(setn == 4 && tempMax < 99)tempMax++;
 			DISplaysetvalue();
 				keyNum[2] = 0;
 		}
@@ -219,11 +219,7 @@ void Display(void)
 					OLED_ShowStr(84, 7, (uint8_t *)"     ", 1, 0);
 
 					 
-					if(elQuantity == 100)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 5);
-					}
-					else if(elQuantity >= 93)
+					if(elQuantity >= 93)
 					{
 							OLED_DrawBMP(84, 7, 100, 8, 0);
 					}
@@ -245,8 +241,9 @@ void Display(void)
 					}
 
 					 
-					OLED_ShowNum(103, 7, elQuantity, 1, 0);
-					OLED_ShowChar(119, 7, '%', 1, 0);
+					char batteryText[5];
+                    snprintf(batteryText, sizeof batteryText, "%3u%%", (unsigned)elQuantity);
+                    OLED_ShowStr(103, 7, (uint8_t *)batteryText, 1, 0);
 							
         current = INA219_ReadCurrent_mA(INA219_ADDRESS);
         OLED_ShowStr(0, 2, (uint8_t *)"Curr:", 2, 0);
