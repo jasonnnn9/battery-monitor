@@ -82,6 +82,12 @@
 /* Magnitude in mA for the display and load limit; reserved failure value. */
 #define INA219_CURRENT_INVALID UINT16_MAX
 
+typedef enum {
+    INA219_OK, INA219_LINK_ERROR, INA219_CONFIG_ERROR,
+    INA219_NOT_READY, INA219_OVERFLOW
+} INA219_Status;
+
+INA219_Status INA219_ReadSample(uint8_t address, uint16_t *milliamps);
 uint8_t INA219_Init(uint8_t Bddr);
 uint16_t INA219_ReadBusVoltage(uint8_t Bddr);
 uint16_t INA219_ReadCurrent_mA(uint8_t Bddr);

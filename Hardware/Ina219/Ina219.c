@@ -85,51 +85,85 @@ uint16_t INA219_ReadCurrentRaw(uint8_t Bddr)
 
 
 
-static bool INA219_ReadCurrentMagnitude(uint8_t address, uint32_t *magnitude)
+static INA219_Status check_settings(uint8_t address)
 {
-    uint16_t config, calibration, raw;
-    if (!ina219_currentDivider_mA ||
-        !INA219_ReadRegister(address, INA219_REG_CONFIG, &config) ||
+    uint16_t config, calibration;
+    if (!INA219_ReadRegister(address, INA219_REG_CONFIG, &config) ||
         !INA219_ReadRegister(address, INA219_REG_CALIBRATION, &calibration))
-        return false;
+        return INA219_LINK_ERROR;
+    if (!ina219_currentDivider_mA || config != ina219_configValue ||
+        calibration != ina219_calibrationValue)
+        return INA219_CONFIG_ERROR;
+    return INA219_OK;
+}
 
-    if (config != ina219_configValue || calibration != ina219_calibrationValue)
-    {
-        /* Restore settings after a sensor brownout. Sample on the next refresh. */
+static INA219_Status INA219_ReadCurrentMagnitude(uint8_t address, uint32_t *magnitude)
+{
+    uint16_t bus, raw;
+    INA219_Status status = check_settings(address);
+    if (status == INA219_LINK_ERROR) {
+        /* Dedicated bus: allow a slave interrupted mid-byte to release SDA. */
+        if (!iicina219.sdaIn()) {
+            for (unsigned pulse = 0; pulse < 9 && !iicina219.sdaIn(); ++pulse) {
+                iicina219.sclLo();
+                delay_us(5);
+                iicina219.sclHi();
+                delay_us(5);
+            }
+            I2C_Stop(iicina219);
+        }
+        status = check_settings(address);
+    }
+    if (status == INA219_CONFIG_ERROR) {
         INA219_SetConfig(address, ina219_configValue);
         INA219_SetCalibration(address, ina219_calibrationValue);
-        return false;
+        /* Do not use a current result from before reconfiguration. */
+        return status;
     }
-    uint16_t bus;
-    if (!INA219_ReadRegister(address, INA219_REG_BUS_VOLTAGE, &bus) ||
-        (bus & 3u) != 2u || /* conversion ready, no math overflow */
-        !INA219_ReadRegister(address, INA219_REG_CURRENT, &raw))
-        return false;
-
+    if (status != INA219_OK)
+        return status;
+    if (!INA219_ReadRegister(address, INA219_REG_BUS_VOLTAGE, &bus))
+        return INA219_LINK_ERROR;
+    if (!(bus & 2u) && !(bus & 1u)) {
+        /* One more conversion interval for the configured 12-bit shunt + bus pair. */
+        HAL_Delay(2);
+        if (!INA219_ReadRegister(address, INA219_REG_BUS_VOLTAGE, &bus))
+            return INA219_LINK_ERROR;
+    }
+    if (bus & 1u)
+        return INA219_OVERFLOW;
+    if (!(bus & 2u))
+        return INA219_NOT_READY;
+    if (!INA219_ReadRegister(address, INA219_REG_CURRENT, &raw))
+        return INA219_LINK_ERROR;
     int32_t counts = (int16_t)raw;
     if (counts < 0)
         counts = -counts;
     *magnitude = (uint32_t)counts;
-    return true;
+    return INA219_OK;
+}
+
+INA219_Status INA219_ReadSample(uint8_t address, uint16_t *milliamps)
+{
+    uint32_t counts;
+    INA219_Status status = INA219_ReadCurrentMagnitude(address, &counts);
+    *milliamps = INA219_CURRENT_INVALID;
+    if (status == INA219_OK)
+        *milliamps = (uint16_t)((counts + ina219_currentDivider_mA / 2u) / ina219_currentDivider_mA);
+    return status;
 }
 
 uint16_t INA219_ReadCurrent_mA(uint8_t address)
 {
-    uint32_t counts;
-    if (!INA219_ReadCurrentMagnitude(address, &counts))
-        return INA219_CURRENT_INVALID;
-    return (uint16_t)((counts + ina219_currentDivider_mA / 2u) / ina219_currentDivider_mA);
+    uint16_t milliamps;
+    INA219_ReadSample(address, &milliamps);
+    return milliamps;
 }
-
- 
-
-
-
 
 uint16_t INA219_ReadCurrent_uA(uint8_t address)
 {
     uint32_t counts;
-    if (!INA219_ReadCurrentMagnitude(address, &counts))
+    if (INA219_ReadCurrentMagnitude(address, &counts) != INA219_OK)
         return INA219_CURRENT_INVALID;
     uint32_t microamps = counts * 1000u / ina219_currentDivider_mA;
     /* The legacy 16-bit uA API reserves its largest value for errors. */
@@ -290,7 +324,7 @@ uint8_t INA219_Init(uint8_t Bddr)
 {
     INA219_Reset(Bddr);
     INA219_SetCalibration_16V_8A(Bddr);    
-    return 0;
+    return (uint8_t)check_settings(Bddr);
 }
 
  

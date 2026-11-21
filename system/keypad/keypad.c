@@ -218,16 +218,20 @@ void KeyScan(void)
 
 
 
-u16 last_current = 0;
+
 u8 last_setn = 0; 
 
 
+static uint16_t batteryAdc;
+static INA219_Status currentStatus = INA219_LINK_ERROR;
+
 void UpdateMeasurements(void)
 {
-    voltage = ADC_ReadBatteryVoltage();
+    batteryAdc = Get_ADC_B1();
+    voltage = ADC_BatteryVoltageFromRaw(batteryAdc);
     if (voltage < 0.1f)
         voltage = 0;
-    current = INA219_ReadCurrent_mA(INA219_ADDRESS);
+    currentStatus = INA219_ReadSample(INA219_ADDRESS, &current);
     temperature = DS18B20_Get_Temp() / 10;
     GetBatteryCapacity();
 }
@@ -278,17 +282,19 @@ void Display(void)
                     OLED_ShowStr(103, 7, (uint8_t *)batteryText, 1, 0);
 							
         OLED_ShowStr(0, 2, (uint8_t *)"Curr:", 2, 0);
-        if (current != last_current || last_setn != 1)
-        {
-            if (current == INA219_CURRENT_INVALID)
-                OLED_ShowStr(48, 2, (uint8_t *)" ERR", 2, 0);
-            else
-                OLED_ShowFormatStr(48, 2, "%4u", (unsigned)current);
-            last_current = current;
-        }
+        /* Pad the whole field so changing from a fault to a number clears it. */
+        static const char *const faultText[] = {
+            [INA219_LINK_ERROR] = "I2C   ", [INA219_CONFIG_ERROR] = "CONFIG",
+            [INA219_NOT_READY] = "WAIT  ", [INA219_OVERFLOW] = "OVF   "
+        };
+        if (currentStatus == INA219_OK)
+            OLED_ShowFormatStr(48, 2, "%4u mA", (unsigned)current);
+        else
+            OLED_ShowFormatStr(48, 2, "%-7s", faultText[currentStatus]);
 
-				OLED_ShowChar(80, 2, 'm', 2, 0);  // 64+16
-				OLED_ShowChar(90, 2, 'A', 2, 0);  // 74+16
+        char adcText[12];
+        snprintf(adcText, sizeof adcText, "ADC %4u", (unsigned)batteryAdc);
+        OLED_ShowStr(0, 7, (uint8_t *)adcText, 1, 0);  // 74+16
 		
     }
     
