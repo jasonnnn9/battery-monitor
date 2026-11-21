@@ -22,6 +22,8 @@
 
 
 void ESP8266_Init(void);
+void ESP8266_RxByte(uint8_t byte);
+void ESP8266_ResetRx(void);
 void ESP8266_Clear(void);
 void ESP8266_SendData(unsigned char *data, unsigned short len);
 unsigned char *ESP8266_GetIPD(unsigned short timeOut);

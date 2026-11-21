@@ -280,9 +280,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 #if(esp8266)
 	if(huart->Instance==USART1)                	 
 {
-		U1Buffer[UART1_Rx_cnt]=*USART1Buf;
+		#if ESP8266_THINGER_BRIDGE
+        ESP8266_RxByte(*USART1Buf);
+#else
+        U1Buffer[UART1_Rx_cnt]=*USART1Buf;
 		++UART1_Rx_cnt;
 		if(UART1_Rx_cnt>255)UART1_Rx_cnt=0;
+#endif
 		HAL_UART_Receive_IT(&UART1_Handler,(u8 *)USART1Buf,1);		
 } 
 #endif
@@ -525,3 +529,16 @@ static void MX_USART2_UART_Init(void)
 
 }
 
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+#if ESP8266_THINGER_BRIDGE
+    if (huart->Instance == USART1) {
+        ESP8266_ResetRx();
+        __HAL_UART_CLEAR_OREFLAG(huart);
+        HAL_UART_Receive_IT(huart, USART1Buf, 1);
+    }
+#else
+    (void)huart;
+#endif
+}

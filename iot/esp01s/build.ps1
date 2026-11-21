@@ -3,9 +3,13 @@ param(
     [Parameter(Mandatory = $true)][string]$ArduinoData,
     [Parameter(Mandatory = $true)][string]$ArduinoUser,
     [switch]$CheckOnly,
-    [switch]$Configure
+    [switch]$Configure,
+    [switch]$ReuseLocalConfig
 )
 $ErrorActionPreference = 'Stop'
+if ($ReuseLocalConfig -and ($CheckOnly -or $Configure)) {
+    throw 'ReuseLocalConfig cannot be combined with CheckOnly or Configure.'
+}
 
 if ($Configure) {
     $env:THINGER_USERNAME = Read-Host 'Thinger.io username'
@@ -29,8 +33,17 @@ $sketch = Join-Path $output 'BatteryMonitorThinger'
 New-Item -ItemType Directory -Force -Path $sketch | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'BatteryMonitorThinger/BatteryMonitorThinger.ino') -Destination $sketch
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'BatteryMonitorThinger/telemetry.h') -Destination $sketch
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../../Protocol/bms_control.h') -Destination $sketch
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'BatteryMonitorThinger/protection.h') -Destination $sketch
 
 $names = @('THINGER_USERNAME', 'THINGER_DEVICE_ID', 'THINGER_DEVICE_CREDENTIAL', 'BMS_WIFI_SSID', 'BMS_WIFI_PASSWORD')
+$secretFile = Join-Path $sketch 'arduino_secrets.h'
+if ($ReuseLocalConfig) {
+    if (!(Test-Path -LiteralPath $secretFile)) { throw 'Local production configuration is missing.' }
+    if ([IO.File]::ReadAllText($secretFile) -match 'BUILD_CHECK_ONLY|YOUR_DEVICE_CREDENTIAL') {
+        throw 'Local configuration still has placeholder credentials.'
+    }
+} else {
 $header = @('#pragma once')
 foreach ($name in $names) {
     $value = if ($CheckOnly) { 'BUILD_CHECK_ONLY' } else { [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -39,7 +52,8 @@ foreach ($name in $names) {
     $escaped = $value.Replace('\', '\\').Replace('"', '\"')
     $header += '#define ' + $name + ' "' + $escaped + '"'
 }
-[IO.File]::WriteAllLines((Join-Path $sketch 'arduino_secrets.h'), $header, (New-Object Text.UTF8Encoding $false))
+[IO.File]::WriteAllLines($secretFile, $header, (New-Object Text.UTF8Encoding $false))
+}
 $oldData = $env:ARDUINO_DIRECTORIES_DATA
 $oldUser = $env:ARDUINO_DIRECTORIES_USER
 $mappedDrive = $null
@@ -63,6 +77,10 @@ try {
     }
     & $ArduinoCli compile --fqbn 'esp8266:esp8266:generic:eesz=1M64,xtal=80' --build-path (Join-Path $output 'objects') --output-dir $output $sketch
     if ($LASTEXITCODE -ne 0) { throw 'ESP8266 build failed.' }
+    # Conservative two-image budget for the 1 MB / 64 KB filesystem layout.
+    if ((Get-Item -LiteralPath (Join-Path $output 'BatteryMonitorThinger.ino.bin')).Length -gt 0x75000) {
+        throw 'Image exceeds the 468 KiB OTA build budget for this flash layout.'
+    }
 } finally {
     $env:ARDUINO_DIRECTORIES_DATA = $oldData
     $env:ARDUINO_DIRECTORIES_USER = $oldUser

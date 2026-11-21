@@ -1,13 +1,21 @@
 #include <ThingerESP8266.h>
+#define THINGER_OTA_VERSION 1.1.0
+#include <ThingerESP8266OTA.h>
+#ifdef PLATFORMIO
+#include "bms_runtime_secrets.h"
+#else
 #include "arduino_secrets.h"
+#endif
 #include "telemetry.h"
 
 ThingerESP8266 thing(THINGER_USERNAME, THINGER_DEVICE_ID, THINGER_DEVICE_CREDENTIAL);
+ThingerESP8266OTA ota(thing);
 static BmsSample sample;
 static bool hasSample;
 static uint32_t lastSample;
 static uint32_t validFrames;
 static uint32_t rejectedFrames;
+#include "protection.h"
 
 static void readTelemetry() {
     static char line[112];
@@ -18,11 +26,14 @@ static void readTelemetry() {
         if (byte == '\n') {
             line[length] = '\0';
             BmsSample next;
+            BmsControlState configuration;
             if (!discard && parseBmsSample(line, next)) {
                 sample = next;
                 lastSample = millis();
                 hasSample = true;
                 ++validFrames;
+            } else if (!discard && bms_parse_state(line, &configuration)) {
+                receiveProtection(configuration);
             } else if (discard || strncmp(line, "BMS,TEMP,", 9) != 0) {
                 ++rejectedFrames;
             }
@@ -41,8 +52,14 @@ void setup() {
     Serial.begin(115200);
     Serial.setDebugOutput(false);
     thing.add_wifi(BMS_WIFI_SSID, BMS_WIFI_PASSWORD);
+    configureProtectionResource();
+    ota.on_start([] { otaRunning = true; });
+    ota.on_end([] { otaRunning = false; });
     thing["status"] >> [](pson& out) {
-        out["firmware"] = "bms-telemetry-v1";
+        out["firmware"] = "bms-control-v1.1-ota";
+        out["ota_enabled"] = ota.is_enabled();
+        out["ota_free_bytes"] = ESP.getFreeSketchSpace();
+        out["heap_free_bytes"] = ESP.getFreeHeap();
         out["uptime_ms"] = millis();
         out["wifi_rssi_dbm"] = WiFi.RSSI();
         out["valid_frames"] = validFrames;
@@ -71,5 +88,7 @@ void setup() {
 
 void loop() {
     readTelemetry();
+    pollProtectionRequest();
+    ota.set_enabled(!requestPending);
     thing.handle();
 }

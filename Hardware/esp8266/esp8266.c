@@ -1,45 +1,112 @@
 #include "main.h"
 #include "esp8266.h"
 
-/* Cloud firmware owns Wi-Fi; STM32 sends read-only measurement snapshots. */
+/* ESP owns Wi-Fi; STM32 validates and persists all protection settings. */
 #if ESP8266_THINGER_BRIDGE
+#include "bms_config.h"
+#include "bms_control.h"
 static uint32_t cloudLastSend;
 static uint32_t cloudSequence;
-static volatile uint32_t cloudTxErrors;
-static char cloudFrame[128];
+static volatile uint32_t cloudTxErrors, cloudRxRejected;
+static char cloudFrame[192];
+static char rxLine[80], pendingLine[80];
+static unsigned rxLength;
+static uint8_t rxDiscard;
+static volatile uint8_t pendingReady;
+static BmsControlCommand lastCommand;
+static uint8_t lastAck;
 
-extern float voltage;
-extern uint16_t current;
-extern uint8_t temperature, elQuantity, load;
+extern float voltage, volMax;
+extern uint16_t current, currentMax;
+extern uint8_t temperature, elQuantity, load, tempMax;
 extern volatile uint8_t warningFlag;
 
-void ESP8266_Init(void)
+void ESP8266_Init(void) {}
+
+void ESP8266_ResetRx(void)
 {
-    /* The ESP boots and reconnects independently. Do not send AT commands. */
+    rxLength = 0;
+    rxDiscard = 0;
+}
+
+void ESP8266_RxByte(uint8_t byte)
+{
+    if (byte == '\n') {
+        if (!rxDiscard && rxLength && !pendingReady) {
+            rxLine[rxLength] = '\0';
+            memcpy(pendingLine, rxLine, rxLength + 1);
+            __DMB();
+            pendingReady = 1;
+        } else if (rxDiscard || pendingReady) {
+            ++cloudRxRejected;
+        }
+        ESP8266_ResetRx();
+    } else if (byte != '\r' && !rxDiscard) {
+        if (byte >= ' ' && byte <= '~' && rxLength < sizeof(rxLine) - 1)
+            rxLine[rxLength++] = (char)byte;
+        else
+            rxDiscard = 1;
+    }
 }
 
 void UsartSendReceiveData(void)
 {
     uint32_t now = HAL_GetTick();
-    if ((uint32_t)(now - cloudLastSend) < 2000u)
-        return;
+    if ((uint32_t)(now - cloudLastSend) < 2000u) return;
     cloudLastSend = now;
-    int millivolts = (int)(voltage * 1000.0f + 0.5f);
-    int milliamps = current == INA219_CURRENT_INVALID ? -1 : (int)current;
-    /* First line also supports the earlier temperature-only ESP probe. */
+    int mv = (int)(voltage * 1000.0f + 0.5f);
+    int ma = current == INA219_CURRENT_INVALID ? -1 : (int)current;
     int length = snprintf(cloudFrame, sizeof(cloudFrame),
         "BMS,TEMP,%u\nBMS,V1,%lu,%d,%d,%u,%u,%u,%u\n",
-        (unsigned)temperature, (unsigned long)cloudSequence++, millivolts,
-        milliamps, (unsigned)temperature, (unsigned)elQuantity,
-        (unsigned)warningFlag, (unsigned)load);
-    if (length <= 0 || (size_t)length >= sizeof(cloudFrame) ||
-        HAL_UART_Transmit(&UART1_Handler, (uint8_t *)cloudFrame, (uint16_t)length, 25) != HAL_OK)
+        (unsigned)temperature, (unsigned long)cloudSequence++, mv, ma,
+        (unsigned)temperature, (unsigned)elQuantity, (unsigned)warningFlag, (unsigned)load);
+    char state[96];
+    int stateLength = snprintf(state, sizeof(state), "BMS,CFG,%lu,%u,%u,%lu,%lu,%u",
+        (unsigned long)(volMax * 1000.0f + 0.5f), (unsigned)currentMax, (unsigned)tempMax,
+        (unsigned long)bmsConfigRevision, (unsigned long)lastCommand.id, (unsigned)lastAck);
+    stateLength = stateLength > 0 && (size_t)stateLength < sizeof(state) ?
+        bms_finish_line(state, sizeof(state)) : 0;
+    if (length <= 0 || !stateLength || (size_t)(length + stateLength) >= sizeof(cloudFrame)) {
+        ++cloudTxErrors;
+        return;
+    }
+    memcpy(cloudFrame + length, state, (size_t)stateLength);
+    length += stateLength;
+    cloudFrame[length] = '\0';
+    if (HAL_UART_Transmit(&UART1_Handler, (uint8_t *)cloudFrame, (uint16_t)length, 25) != HAL_OK)
         ++cloudTxErrors;
 }
 
 void UsartReceive(void)
 {
-    /* Cloud monitoring has no remote relay or protection-threshold commands. */
+    if (!pendingReady) return;
+    char line[sizeof(pendingLine)];
+    memcpy(line, pendingLine, sizeof(line));
+    __DMB();
+    pendingReady = 0;
+    BmsControlCommand command;
+    if (!bms_parse_command(line, &command)) {
+        ++cloudRxRejected;
+        return;
+    }
+    if (command.id == lastCommand.id) {
+        if (memcmp(&command, &lastCommand, sizeof(command)) != 0)
+            lastAck = BMS_ACK_ID_CONFLICT;
+        // A retry never reapplies or rewrites a previously handled request.
+    } else {
+        lastCommand = command;
+        if (!bms_limits_valid(command.low_mv, command.high_ma, command.high_c))
+            lastAck = BMS_ACK_RANGE;
+        else if (setn >= 2 && setn <= 4)
+            lastAck = BMS_ACK_EDITING;
+        else if (command.revision != bmsConfigRevision)
+            lastAck = BMS_ACK_REVISION;
+        else {
+            lastAck = BmsConfig_Apply(command.low_mv, command.high_ma, command.high_c);
+            if (lastAck == BMS_ACK_APPLIED) CotorFun();
+        }
+    }
+    cloudLastSend = HAL_GetTick() - 2000u;
 }
 #else
 #if (USART1_ESP)

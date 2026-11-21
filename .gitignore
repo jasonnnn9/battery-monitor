@@ -13,3 +13,5 @@
 Thumbs.db
 arduino_secrets.h
 /iot/esp01s/build/
+/iot/esp01s/.pio/
+bms_runtime_secrets.h

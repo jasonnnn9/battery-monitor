@@ -1,6 +1,6 @@
 # ESP-01S / Thinger.io
 
-STM32 独立采样和保护，通过 PA9/TX 向 ESP RX 发送测量快照；ESP 使用 Wi-Fi 连接 Thinger.io。云端仅提供读取资源，不控制继电器或保护阈值。两端均为 115200、8N1、共地，绿板已有串口连接。STM32 的 `ESP8266_THINGER_BRIDGE=1` 使用此模式，不能与旧手机直连 AT 固件混用。
+STM32 独立采样、执行保护并保存阈值。PA9/TX 向 ESP RX 发送测量和配置，PA10/RX 从 ESP TX 接收修改请求。绿板已有这两根信号线，两端共地，串口为 115200、8N1。ESP 使用 Wi-Fi 连接 Thinger.io，并与启用 `ESP8266_THINGER_BRIDGE=1` 的 STM32 固件配套使用。
 
 ## 串口协议
 
@@ -25,6 +25,7 @@ Windows 下工具目录较长时，脚本会临时映射一个空闲盘符供旧
 
 ```powershell
 arm-none-eabi-g++ -std=c++14 -Wall -Wextra -Werror -fsyntax-only iot/esp01s/tests/telemetry_test.cpp
+arm-none-eabi-g++ -std=c++14 -Wall -Wextra -Werror -fsyntax-only iot/esp01s/tests/control_test.cpp
 ```
 
 测试使用编译期断言验证实际解析函数，包含字段映射、整数溢出、缺失/多余字段、无效电流标记及报警位一致性。
@@ -37,9 +38,23 @@ arm-none-eabi-g++ -std=c++14 -Wall -Wextra -Werror -fsyntax-only iot/esp01s/test
 
 更新后将 ESP 装回绿板，在 Thinger.io 的设备 API 中运行：
 
-- `status`：固件版本应为 `bms-telemetry-v1`，有效帧计数应持续增加。
+- `status` 显示固件版本 `bms-control-v1.1-ota`、OTA 可用状态和空间。组装好两块板后，有效帧计数应持续增加。
 - `telemetry`：`data_valid=true`，显示 `voltage_v`、`current_ma`、`power_w`、`temperature_c`、`capacity_percent`、`warning_flags`、`load_enabled`、序号和数据年龄。电流无效时省略电流和功率，并给出 `current_valid=false`。
 
 先与 OLED 比较，再切换设置页面检查序号继续增加；断开网络时验证本地监测和保护继续工作。Device API 可读后再将仪表盘数据源绑定到这些字段。此版本没有自动写入历史 Data Bucket，历史存储间隔需按账户限制配置。
+
+## 读取与修改保护阈值
+
+在 Device API 中打开 `protection`，空输入读取当前配置。`board_online=true` 表示 ESP 最近 5 秒内收到过 STM32 的测量和配置帧。写入时同时提供三个数值，单位与字段名一致。以下示例使用项目初始值，范围是协议允许值，具体电池与负载的阈值应按其规格选取。
+
+```json
+{"low_voltage_v": 2.5, "high_current_ma": 180, "high_temperature_c": 35}
+```
+
+欠压范围 0.5–16.5 V，步长 0.1 V。过流为 10–3200 mA 的整数，过温为 0–99 °C 的整数。STM32 用带 CRC 的 SET 和 CFG 帧接收请求、回报实际值。若返回 `pending`，稍后空输入重读，核对同一个 `request_id` 的 `applied` 与三个实际值。若为 `timeout`，先重读实际配置。`local_editing` 表示有人正在板上设置，`configuration_changed` 表示提交前配置已变化，均应读取最新值再操作。保存失败时保留上一份生效配置。验收时可在电池和负载断开的情况下保存一组测试值，整板断电再上电，对照 OLED 和云端读数，最后恢复原设置。
+
+## ESP 无线更新
+
+首次经串口烧入带 OTA 的正式固件，然后让 ESP 正常启动并连入 Thinger.io。在 VS Code 中把本目录作为 PlatformIO 项目打开，选择 `esp01s` 环境，使用 Thinger.io 扩展选定目标设备并更新。扩展需要账户访问令牌，权限见官方说明。沿用本机的五项配置或已有正式构建的私有配置。每次发布递增 `THINGER_OTA_VERSION`。本项目给 1 MB Flash 设置了 468 KiB 镜像上限，更新前还应核对设备 `status.ota_free_bytes`。完成后查看设备重新上线和版本变化，再核对遥测与阈值。此路径仅更新 ESP，STM32 应用仍单独烧录。[Thinger.io OTA 操作说明](https://docs.thinger.io/devices/ota)
 
 参考：[Thinger.io ESP8266](https://docs.thinger.io/devices/arduino/boards/esp8266)、[设备资源与调用](https://docs.thinger.io/devices/arduino/coding)。

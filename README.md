@@ -65,7 +65,8 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\.vscode\build-gc
 |---|---|
 | Core/Src/main.c | 初始化顺序与主循环 |
 | system/keypad/keypad.c | 按键、OLED 页面、阈值和报警动作 |
-| Hardware/esp8266/esp8266.c | 热点、TCP 服务和手机指令 |
+| Hardware/esp8266/esp8266.c | STM32 与 ESP 的双向串口通信，另保留旧 AT 模式 |
+| system/Config/bms_config.c | 保护阈值校验、保存和上电恢复 |
 | system/Adc/adc.c | PB1 电池分压采样（5∶1，ADC 参考电压按 3.3 V 换算） |
 | Hardware/Ina219/Ina219.c | R100 分流电阻（0.1 Ω）电流采样及校准 |
 | Hardware/18B20/ds18b20.c | 温度传感器 |
@@ -77,7 +78,7 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\.vscode\build-gc
 
 主界面和手机端显示电流的绝对值（mA）。电流读数无效时，OLED 显示 `ERR`，手机数据中的电流为 `-1`，并设置 `warningFlag` 的第 3 位（值 8）。此状态下负载继电器关断，读数恢复后可手动重新接通负载。
 
-ESP8266 提供 Wi-Fi 热点与 8080 端口 TCP 服务，手机端 APK 单独分发。测量更新与保护判断在所有页面持续执行，完整的电池充放电保护尚需专项验收。
+默认 ESP 固件通过 Wi-Fi 接入 Thinger.io。早期手机 APK 使用的热点与 8080 端口 TCP 服务需要旧版 AT 固件。测量更新与保护判断在所有页面持续执行，完整的电池充放电保护尚需专项验收。
 
 ## 组员协作
 
@@ -122,7 +123,7 @@ V9 绿板 D1 指示灯与 BUZZER1 共用 VT1 驱动，由 PA11 控制。PCB 网�
 
 每轮主循环先采集电压、电流和温度，再执行保护判断，之后处理按键和显示。空白页、主页面和三个设置页均执行采样与保护。
 
-进入某个设置页时复制当前生效阈值。S2、S3 编辑屏幕临时值，保护继续使用原阈值；按 S1 离开该设置页时提交这一项新值，并立即根据最近读数重新判断报警。手机设置仍直接修改生效阈值，通信处理保持在主页面。
+进入设置页时复制当前生效阈值。S2、S3 编辑临时值，保护继续使用原阈值。按 S1 离开时，STM32 保存该项并按最近读数重新判断报警。保存失败会停在原页并显示 SAVE ERROR。编辑期间云端仍能读取数据，远程修改会收到 local_editing。
 
 采样在前台主循环中执行，实际间隔受现有按键消抖、温度读取和串口等待影响。此版本没有提供固定的保护响应时间保证。
 
@@ -132,6 +133,8 @@ V9 绿板 D1 指示灯与 BUZZER1 共用 VT1 驱动，由 PA11 控制。PCB 网�
 
 云端模式代码在 [iot/esp01s](iot/esp01s/README.md)。STM32 使用 `ESP8266_THINGER_BRIDGE=1`，通过串口每约 2 秒发送测量快照，所有页面均继续发送；ESP-01S 需要配套的 `BatteryMonitorThinger` 固件。旧的 ESP 连通性测试程序只显示在线状态，不能提供完整测量资源。
 
-云端提供只读 `status` 与 `telemetry` 资源，包含电压、电流、功率、温度、电量估算、报警位和负载开关状态。超过 5 秒无有效串口帧时标记数据失效；网络断开不改变 STM32 本地保护。此模式不使用 ESP 的 AT 指令或旧手机直连 App，云端不控制负载或保护阈值。
+在 Device API 中用 `status` 查看连接与接收帧数，用 `telemetry` 读取电压、电流、功率、温度、电量估算、报警位和负载开关状态。连续 5 秒未收到有效测量帧后，数据标记为失效。负载由主页面 S3 操作，本地保护在断网后继续执行。
+
+`protection` 可读取或一起修改欠压、过流、过温阈值。本地与云端共用 STM32 中的一份配置。首次启动且没有有效记录时默认值为 2.5 V、180 mA、35 °C。STM32 在 Flash 最后 2 KiB 保存设置，更新应用时应保留这两页及开头的 Maple 引导区。ESP 支持通过 Thinger.io 更新自身固件。操作与验收步骤见 [ESP 使用说明](iot/esp01s/README.md)。
 
 凭据由本机环境变量提供，不上传源码仓库。`build.ps1 -CheckOnly` 生成的占位凭据固件只能检查编译，不能烧录。完整端到端验收应确认有效帧计数递增、云端与 OLED 读数一致、设置页面仍更新及断网期间本地保护正常。
