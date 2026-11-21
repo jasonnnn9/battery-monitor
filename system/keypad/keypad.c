@@ -1,5 +1,7 @@
 #include "main.h"
 #include "keypad.h"
+#include "bms_config.h"
+#include "bms_control.h"
 
 #if(button_Set)
 
@@ -119,13 +121,20 @@ void KeyScanHandle(void)
         HAL_Delay(100);
         if (keyNum[0] == 1)
         {
-            /* Commit only the setting whose page is being left. */
+            /* Persist only the setting whose page is being left. */
+            uint8_t result = BMS_ACK_APPLIED;
+            uint32_t mv = (uint32_t)(volMax * 1000.0f + 0.5f);
             if (setn == 2)
-                volMax = editVolMax;
+                result = BmsConfig_Apply((uint32_t)(editVolMax * 1000.0f + 0.5f), currentMax, tempMax);
             else if (setn == 3)
-                currentMax = editCurrentMax;
+                result = BmsConfig_Apply(mv, editCurrentMax, tempMax);
             else if (setn == 4)
-                tempMax = editTempMax;
+                result = BmsConfig_Apply(mv, currentMax, editTempMax);
+            if (result != BMS_ACK_APPLIED) {
+                OLED_ShowStr(0, 7, (uint8_t *)"SAVE ERROR", 1, 0);
+                keyNum[0] = 0;
+                return;
+            }
 
             setn++;
             if (setn > 4)
@@ -151,9 +160,9 @@ void KeyScanHandle(void)
         if (keyNum[1] == 1)
         {
             if (setn == 2 && editVolMax > 0.5f)
-                editVolMax -= 0.5f;
+            { editVolMax -= 0.5f; if (editVolMax < 0.5f) editVolMax = 0.5f; }
             if (setn == 3 && editCurrentMax > 10)
-                editCurrentMax -= 10;
+            { editCurrentMax = editCurrentMax < 20 ? 10 : editCurrentMax - 10; }
             if (setn == 4 && editTempMax > 0)
                 editTempMax--;
             DISplaysetvalue();
@@ -171,10 +180,10 @@ void KeyScanHandle(void)
                 load = !load;
                 RELAY(load != 0);
             }
-            if (setn == 2 && editVolMax < 25.0f)
-                editVolMax += 0.5f;
+            if (setn == 2 && editVolMax < 16.5f)
+            { editVolMax += 0.5f; if (editVolMax > 16.5f) editVolMax = 16.5f; }
             if (setn == 3 && editCurrentMax < 3200)
-                editCurrentMax += 10;
+            { editCurrentMax = editCurrentMax > 3190 ? 3200 : editCurrentMax + 10; }
             if (setn == 4 && editTempMax < 99)
                 editTempMax++;
             DISplaysetvalue();

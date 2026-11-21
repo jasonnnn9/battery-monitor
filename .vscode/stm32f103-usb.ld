@@ -2,11 +2,13 @@ ENTRY(Reset_Handler)
 
 MEMORY
 {
-  FLASH (rx)  : ORIGIN = 0x08002000, LENGTH = 56K
+  FLASH (rx)  : ORIGIN = 0x08002000, LENGTH = 54K
+  CONFIG (r)  : ORIGIN = 0x0800F800, LENGTH = 2K
   RAM   (xrw) : ORIGIN = 0x20000000, LENGTH = 20K
 }
 
 _estack = ORIGIN(RAM) + LENGTH(RAM);
+__bms_config_start = ORIGIN(CONFIG);
 
 SECTIONS
 {
