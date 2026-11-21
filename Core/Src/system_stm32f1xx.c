@@ -174,6 +174,12 @@ const uint8_t APBPrescTable[8U] =  {0, 0, 0, 0, 1, 2, 3, 4};
   */
 void SystemInit (void)
 {
+  /* A bootloader jump can leave TIM2 active before the application initialises it. */
+  NVIC_DisableIRQ(TIM2_IRQn);
+  RCC->APB1RSTR |= RCC_APB1RSTR_TIM2RST;
+  RCC->APB1RSTR &= ~RCC_APB1RSTR_TIM2RST;
+  NVIC_ClearPendingIRQ(TIM2_IRQn);
+
 #if defined(STM32F100xE) || defined(STM32F101xE) || defined(STM32F101xG) || defined(STM32F103xE) || defined(STM32F103xG)
   #ifdef DATA_IN_ExtSRAM
     SystemInit_ExtMemCtl(); 
