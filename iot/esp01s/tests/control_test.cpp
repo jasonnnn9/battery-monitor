@@ -1,4 +1,11 @@
 #include "../../../Protocol/bms_control.h"
+static_assert(bms_relay_blocking_warnings(BMS_WARNING_TEMPERATURE_SENSOR, 1) != 0,
+              "A missing temperature probe must stop a protected load");
+static_assert(bms_relay_blocking_warnings(BMS_WARNING_TEMPERATURE_SENSOR, 0) == 0,
+              "The temperature fault alone must not stop a load in unprotected mode");
+static_assert(bms_relay_blocking_warnings(BMS_WARNING_TEMPERATURE_SENSOR |
+              BMS_WARNING_CURRENT_SENSOR, 0) == BMS_WARNING_CURRENT_SENSOR,
+              "Current sensor faults still block the load");
 constexpr bool command_ok(const char* line) { BmsControlCommand command={}; return bms_parse_command(line,&command); }
 constexpr bool state_ok(const char* line) { BmsControlState state={}; return bms_parse_state(line,&state); }
 static_assert(bms_crc16("123456789",9)==0x29b1,"CCITT test vector");

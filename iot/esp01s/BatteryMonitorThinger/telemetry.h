@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
+#include "bms_control.h"
 
 struct BmsSample {
     uint32_t sequence;
@@ -11,6 +12,10 @@ struct BmsSample {
     int capacityPercent;
     int warnings;
     bool loadEnabled;
+
+    constexpr bool temperatureValid() const {
+        return (warnings & BMS_WARNING_TEMPERATURE_SENSOR) == 0;
+    }
 };
 
 // Parse into a temporary object so a damaged frame cannot partially update data.
@@ -40,10 +45,12 @@ constexpr bool parseBmsSample(const char* line, BmsSample& sample) {
     }
     if (negative[0] || negative[1] || negative[4] || negative[5] || negative[6]) return false;
     if (fields[1] > 25000 || fields[2] > 65534 || fields[3] > 125 ||
-        fields[4] > 100 || fields[5] > 15 || fields[6] > 1) return false;
+        fields[4] > 100 || fields[5] > BMS_WARNING_MASK || fields[6] > 1) return false;
     if (negative[2] && fields[2] != 1) return false;
     if (negative[3] && fields[3] > 55) return false;
-    if (negative[2] != ((fields[5] & 8u) != 0)) return false;
+    if (negative[2] != ((fields[5] & BMS_WARNING_CURRENT_SENSOR) != 0)) return false;
+    if ((fields[5] & BMS_WARNING_TEMPERATURE_SENSOR) &&
+        (negative[3] || fields[3] != 0 || (fields[5] & BMS_WARNING_HIGH_TEMP))) return false;
     sample = {fields[0], static_cast<int>(fields[1]),
         negative[2] ? -1 : static_cast<int>(fields[2]),
         negative[3] ? -static_cast<int>(fields[3]) : static_cast<int>(fields[3]),

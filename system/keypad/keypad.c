@@ -85,15 +85,11 @@ uint16_t currentMax = 180;
 
 uint8_t setn = 1;
 static uint8_t protectionEnabled;
-enum {
-    WARNING_LOW_VOLTAGE = 1u << 0,
-    WARNING_HIGH_CURRENT = 1u << 1,
-    WARNING_HIGH_TEMP = 1u << 2,
-    WARNING_CURRENT_SENSOR = 1u << 3
-};
+uint8_t loadBlocked = 1;
 u8 mode = 0, load = 0, led = 0;
-volatile u8 warningFlag = WARNING_CURRENT_SENSOR;
-uint8_t temperature=25;
+volatile u8 warningFlag = BMS_WARNING_CURRENT_SENSOR | BMS_WARNING_TEMPERATURE_SENSOR;
+int16_t temperatureDeciC;
+static uint8_t temperatureValid;
 uint8_t tempMax = 35;
 
 static float editVolMax;
@@ -187,7 +183,7 @@ void KeyScanHandle(void)
 
     if (s3 && setn != 1) {
         AdjustSetting(1);
-    } else if (s3 && (load || warningFlag == 0)) {
+    } else if (s3 && (load || !loadBlocked)) {
         load = !load;
         RELAY(load != 0);
     }
@@ -237,7 +233,7 @@ void UpdateMeasurements(void)
     if (voltage < 0.1f)
         voltage = 0;
     currentStatus = INA219_ReadSample(INA219_ADDRESS, &current);
-    temperature = DS18B20_Get_Temp() / 10;
+    temperatureValid = DS18B20_Update(&temperatureDeciC);
     GetBatteryCapacity();
 }
 
@@ -248,8 +244,12 @@ void Display(void)
 			
 			
 				OLED_ShowStr(0, 4, (uint8_t *)"Temp:", 2, 0);
-				OLED_ShowNum(48,4,temperature,2,0);
-				OLED_ShowCentigrade(70,4);
+        if (temperatureValid) {
+            OLED_ShowFormatStr(48, 4, "%-6d", temperatureDeciC / 10);
+            OLED_ShowCentigrade(82, 4);
+        } else {
+            OLED_ShowStr(48, 4, (uint8_t *)"ERR   ", 2, 0);
+        }
 			
         OLED_ShowStr(0, 0, (uint8_t *)"Volt:", 2, 0);
 				OLED_ShowFormatStr(48, 0, "%-5.2f", voltage);
@@ -297,9 +297,10 @@ void Display(void)
         else
             OLED_ShowFormatStr(48, 2, "%-7s", faultText[currentStatus]);
 
-		
+    } else {
+        OLED_ShowStr(87, 6, (uint8_t *)(temperatureValid ? "      " : "T:ERR "), 1, 0);
     }
-    
+
     OLED_ShowStr(0, 6, (uint8_t *)(protectionEnabled ? "P:ON " : "P:OFF"), 1, 0);
     OLED_ShowStr(45, 6, (uint8_t *)(load ? "L:ON " : "L:OFF"), 1, 0);
     last_setn = setn;
@@ -349,21 +350,26 @@ void CotorFun(void)
 {
     u8 warnings = 0;
     if (protectionEnabled && voltage < volMax)
-        warnings |= WARNING_LOW_VOLTAGE;
+        warnings |= BMS_WARNING_LOW_VOLTAGE;
     if (current == INA219_CURRENT_INVALID)
-        warnings |= WARNING_CURRENT_SENSOR;
+        warnings |= BMS_WARNING_CURRENT_SENSOR;
     else if (protectionEnabled && current > currentMax)
-        warnings |= WARNING_HIGH_CURRENT;
-    if (protectionEnabled && temperature > tempMax)
-        warnings |= WARNING_HIGH_TEMP;
+        warnings |= BMS_WARNING_HIGH_CURRENT;
+    if (!temperatureValid)
+        warnings |= BMS_WARNING_TEMPERATURE_SENSOR;
+    else if (protectionEnabled && temperatureDeciC > tempMax * 10)
+        warnings |= BMS_WARNING_HIGH_TEMP;
 
 
     warningFlag = warnings;
-    if (warningFlag)
+    warnings = bms_relay_blocking_warnings(warnings, protectionEnabled);
+    loadBlocked = warnings != 0;
+    if (loadBlocked)
     {
         RELAY(OFF);
         load = 0;
     }
-    RELAY1((warningFlag & WARNING_HIGH_TEMP) != 0);
-    Buzzer_SetAlarm(warningFlag & (WARNING_LOW_VOLTAGE | WARNING_HIGH_CURRENT | WARNING_HIGH_TEMP));
+    RELAY1((warnings & BMS_WARNING_HIGH_TEMP) != 0);
+    Buzzer_SetAlarm(warnings & (BMS_WARNING_LOW_VOLTAGE | BMS_WARNING_HIGH_CURRENT |
+                               BMS_WARNING_HIGH_TEMP | BMS_WARNING_TEMPERATURE_SENSOR));
 }

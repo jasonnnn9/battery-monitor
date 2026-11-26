@@ -13,6 +13,10 @@ BMS,V1,0,4240,1,27,100,0,0
 
 第二行依次为序号、电压 mV、电流 mA、温度 °C、电量估算百分比、报警位和负载开关状态。电流无效时为 -1，报警位 bit3 同时置位。其余报警位 bit0 欠压、bit1 过流、bit2 过温。电流目前取绝对值，电量沿用电压换算，均不能视为已完成计量校准的结果。功率为电压与电流绝对值的乘积。
 
+Warning bit 4 (value 16) indicates a temperature probe fault. In such frames the numeric temperature field is a placeholder, and `telemetry` reports `temperature_valid=false` and omits `temperature_c`. The other measurements continue to update. Deploy ESP firmware 1.1.2 before updating the STM32, since older ESP parsers reject frames containing bit 4.
+
+On the V9 bench, use a safe test load and set the thresholds so normal readings permit the relay to close. Enable protection and the load, then disconnect the probe. Check that the OLED shows a temperature error, the relay opens, and the cloud flags the temperature as invalid. After reconnecting the probe, check that valid readings return and the load stays off until switched on locally.
+
 ESP 丢弃超长、格式错误、越界或状态不一致的数据帧。`sample_age_ms` 是 ESP 接收后经过的时间；5 秒无有效帧后 `data_valid=false`，不再输出旧测量值。仪表盘必须使用有效标记，不能把断线当成测量值为零。
 
 ## 编译
@@ -24,7 +28,7 @@ ESP 丢弃超长、格式错误、越界或状态不一致的数据帧。`sample
 Windows 下工具目录较长时，脚本会临时映射一个空闲盘符供旧版 ESP GCC 使用，并在结束时移除映射，不迁移或重装工具。协议检查可在项目根目录运行：
 
 ```powershell
-arm-none-eabi-g++ -std=c++14 -Wall -Wextra -Werror -fsyntax-only iot/esp01s/tests/telemetry_test.cpp
+arm-none-eabi-g++ -std=c++14 -Wall -Wextra -Werror -I Protocol -fsyntax-only iot/esp01s/tests/telemetry_test.cpp
 arm-none-eabi-g++ -std=c++14 -Wall -Wextra -Werror -fsyntax-only iot/esp01s/tests/control_test.cpp
 ```
 
@@ -38,7 +42,7 @@ arm-none-eabi-g++ -std=c++14 -Wall -Wextra -Werror -fsyntax-only iot/esp01s/test
 
 更新后将 ESP 装回绿板，在 Thinger.io 的设备 API 中运行：
 
-- `status` 显示固件版本 `bms-control-v1.1-ota`、OTA 可用状态和空间。组装好两块板后，有效帧计数应持续增加。
+- `status` shows firmware `bms-control-v1.1.2-ota`, OTA availability and free space. The valid-frame counter should keep increasing with both boards installed.
 - `telemetry`：`data_valid=true`，显示 `voltage_v`、`current_ma`、`power_w`、`temperature_c`、`capacity_percent`、`warning_flags`、`load_enabled`、序号和数据年龄。电流无效时省略电流和功率，并给出 `current_valid=false`。
 
 先与 OLED 比较，再切换设置页面检查序号继续增加；断开网络时验证本地监测和保护继续工作。Device API 可读后再将仪表盘数据源绑定到这些字段。此版本没有自动写入历史 Data Bucket，历史存储间隔需按账户限制配置。

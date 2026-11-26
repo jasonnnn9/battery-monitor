@@ -1,5 +1,5 @@
+#define THINGER_OTA_VERSION 1.1.2
 #include <ThingerESP8266.h>
-#define THINGER_OTA_VERSION 1.1.0
 #include <ThingerESP8266OTA.h>
 #ifdef PLATFORMIO
 #include "bms_runtime_secrets.h"
@@ -56,7 +56,7 @@ void setup() {
     ota.on_start([] { otaRunning = true; });
     ota.on_end([] { otaRunning = false; });
     thing["status"] >> [](pson& out) {
-        out["firmware"] = "bms-control-v1.1-ota";
+        out["firmware"] = "bms-control-v1.1.2-ota";
         out["ota_enabled"] = ota.is_enabled();
         out["ota_free_bytes"] = ESP.getFreeSketchSpace();
         out["heap_free_bytes"] = ESP.getFreeHeap();
@@ -69,13 +69,14 @@ void setup() {
         const uint32_t age = millis() - lastSample;
         const bool fresh = hasSample && age < 5000u;
         out["data_valid"] = fresh;
-        out["temperature_valid"] = fresh;
+        const bool temperatureValid = fresh && sample.temperatureValid();
+        out["temperature_valid"] = temperatureValid;
         out["current_valid"] = fresh && sample.currentMa >= 0;
         if (hasSample) out["sample_age_ms"] = age;
         if (!fresh) return;
         out["sequence"] = sample.sequence;
         out["voltage_v"] = sample.voltageMv / 1000.0;
-        out["temperature_c"] = sample.temperatureC;
+        if (temperatureValid) out["temperature_c"] = sample.temperatureC;
         out["capacity_percent"] = sample.capacityPercent;
         out["warning_flags"] = sample.warnings;
         out["load_enabled"] = sample.loadEnabled;

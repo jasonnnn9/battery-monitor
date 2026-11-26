@@ -18,7 +18,8 @@ static uint8_t lastAck;
 
 extern float voltage, volMax;
 extern uint16_t current, currentMax;
-extern uint8_t temperature, elQuantity, load, tempMax;
+extern int16_t temperatureDeciC;
+extern uint8_t elQuantity, load, tempMax;
 extern volatile uint8_t warningFlag;
 
 void ESP8266_Init(void) {}
@@ -56,10 +57,17 @@ void UsartSendReceiveData(void)
     cloudLastSend = now;
     int mv = (int)(voltage * 1000.0f + 0.5f);
     int ma = current == INA219_CURRENT_INVALID ? -1 : (int)current;
+    unsigned warnings = warningFlag;
+    int temp = (warnings & BMS_WARNING_TEMPERATURE_SENSOR) ? 0 : temperatureDeciC / 10;
+    char legacyTemp[8];
+    if (warnings & BMS_WARNING_TEMPERATURE_SENSOR)
+        strcpy(legacyTemp, "ERR");
+    else
+        snprintf(legacyTemp, sizeof(legacyTemp), "%d", temp);
     int length = snprintf(cloudFrame, sizeof(cloudFrame),
-        "BMS,TEMP,%u\nBMS,V1,%lu,%d,%d,%u,%u,%u,%u\n",
-        (unsigned)temperature, (unsigned long)cloudSequence++, mv, ma,
-        (unsigned)temperature, (unsigned)elQuantity, (unsigned)warningFlag, (unsigned)load);
+        "BMS,TEMP,%s\nBMS,V1,%lu,%d,%d,%d,%u,%u,%u\n",
+        legacyTemp, (unsigned long)cloudSequence++, mv, ma, temp,
+        (unsigned)elQuantity, warnings, (unsigned)load);
     char state[96];
     int stateLength = snprintf(state, sizeof(state), "BMS,CFG,%lu,%u,%u,%lu,%lu,%u",
         (unsigned long)(volMax * 1000.0f + 0.5f), (unsigned)currentMax, (unsigned)tempMax,
@@ -136,7 +144,8 @@ extern float volMax;
 extern uint16_t current;
 extern uint16_t currentMax;
 extern u8 elQuantity;
-extern uint8_t temperature;
+extern int16_t temperatureDeciC;
+extern uint8_t loadBlocked;
 extern uint8_t tempMax;
 //==========================================================
  
@@ -167,7 +176,7 @@ void UsartSendReceiveData(void)
 
 		sprintf(SEND_BUF, "voltage%1.2f current%4d temperature%2d elQuantity%3d warningFlag%2d",voltage,
                 current == INA219_CURRENT_INVALID ? -1 : (int)current,
-                temperature, elQuantity, warningFlag);
+                temperatureDeciC / 10, elQuantity, warningFlag);
 
 		ESP8266_SendData((u8 *)SEND_BUF, strlen(SEND_BUF));
 		
@@ -185,7 +194,7 @@ void UsartReceive(void)
 		setValue = ReceiveData_(dataPtr,"load:");
 		if(setValue != 0)
 		{
-			if(warningFlag == 0)
+			if(!loadBlocked)
 			{
 				load = !load;
 				if(load == 0){RELAY(OFF);}

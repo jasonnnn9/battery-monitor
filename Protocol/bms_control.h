@@ -11,6 +11,20 @@
 #endif
 
 enum {
+    BMS_WARNING_LOW_VOLTAGE = 1u << 0,
+    BMS_WARNING_HIGH_CURRENT = 1u << 1,
+    BMS_WARNING_HIGH_TEMP = 1u << 2,
+    BMS_WARNING_CURRENT_SENSOR = 1u << 3,
+    BMS_WARNING_TEMPERATURE_SENSOR = 1u << 4,
+    BMS_WARNING_MASK = (1u << 5) - 1u
+};
+
+BMS_INLINE uint8_t bms_relay_blocking_warnings(uint8_t warnings, uint8_t protection_enabled)
+{
+    return protection_enabled ? warnings : (uint8_t)(warnings & ~BMS_WARNING_TEMPERATURE_SENSOR);
+}
+
+enum {
     BMS_ACK_NONE = 0,
     BMS_ACK_APPLIED = 1,
     BMS_ACK_RANGE = 2,
