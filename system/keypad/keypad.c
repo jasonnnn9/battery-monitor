@@ -239,70 +239,80 @@ void UpdateMeasurements(void)
 
 void Display(void)
 {
-    if(setn == 1)
-    {
-			
-			
-				OLED_ShowStr(0, 4, (uint8_t *)"Temp:", 2, 0);
-        if (temperatureValid) {
-            OLED_ShowFormatStr(48, 4, "%-6d", temperatureDeciC / 10);
-            OLED_ShowCentigrade(82, 4);
-        } else {
-            OLED_ShowStr(48, 4, (uint8_t *)"ERR   ", 2, 0);
+    static char lastVoltageText[8];
+    static uint32_t lastReadingsAt;
+    static uint16_t lastCurrent;
+    static INA219_Status lastCurrentStatus;
+    static int lastTemperature;
+    static uint8_t lastTemperatureValid, lastCapacity, lastProtection, lastLoad;
+    uint8_t pageChanged = setn != last_setn;
+    uint32_t now = HAL_GetTick();
+
+    if (setn == 1) {
+        int degrees = temperatureDeciC / 10;
+        if (pageChanged) {
+            OLED_ShowStr(0, 0, (uint8_t *)"Volt:", 2, 0);
+            OLED_ShowChar(90, 0, 'V', 2, 0);
+            OLED_ShowStr(0, 2, (uint8_t *)"Curr:", 2, 0);
+            OLED_ShowStr(0, 4, (uint8_t *)"Temp:", 2, 0);
         }
-			
-        OLED_ShowStr(0, 0, (uint8_t *)"Volt:", 2, 0);
-				OLED_ShowFormatStr(48, 0, "%-5.2f", voltage);
-			
-        OLED_ShowChar(90,0,'V',2,0);
 
-											 
-					OLED_ShowStr(84, 7, (uint8_t *)"     ", 1, 0);
+        uint8_t refreshReadings = pageChanged || now - lastReadingsAt >= 1000u;
+        if (refreshReadings) {
+            char voltageText[sizeof lastVoltageText];
+            snprintf(voltageText, sizeof voltageText, "%-5.2f", voltage);
+            if (pageChanged || strcmp(voltageText, lastVoltageText) != 0) {
+                OLED_ShowStr(48, 0, (uint8_t *)voltageText, 2, 0);
+                strcpy(lastVoltageText, voltageText);
+            }
 
-					 
-					if(elQuantity >= 93)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 0);
-					}
-					else if(elQuantity >= 71)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 1);
-					}
-					else if(elQuantity >= 41)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 2);
-					}
-					else if(elQuantity >= 21)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 3);
-					}
-					else
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 4);
-					}
+            if (pageChanged || elQuantity != lastCapacity) {
+                unsigned icon = elQuantity >= 93 ? 0 : elQuantity >= 71 ? 1 :
+                    elQuantity >= 41 ? 2 : elQuantity >= 21 ? 3 : 4;
+                OLED_DrawBMP(84, 7, 100, 8, icon);
+                char batteryText[5];
+                snprintf(batteryText, sizeof batteryText, "%3u%%", (unsigned)elQuantity);
+                OLED_ShowStr(103, 7, (uint8_t *)batteryText, 1, 0);
+                lastCapacity = elQuantity;
+            }
+            lastReadingsAt = now;
+        }
 
-					 
-					char batteryText[5];
-                    snprintf(batteryText, sizeof batteryText, "%3u%%", (unsigned)elQuantity);
-                    OLED_ShowStr(103, 7, (uint8_t *)batteryText, 1, 0);
-							
-        OLED_ShowStr(0, 2, (uint8_t *)"Curr:", 2, 0);
-        /* Pad the whole field so changing from a fault to a number clears it. */
-        static const char *const faultText[] = {
-            [INA219_LINK_ERROR] = "I2C   ", [INA219_CONFIG_ERROR] = "CONFIG",
-            [INA219_NOT_READY] = "WAIT  ", [INA219_OVERFLOW] = "OVF   "
-        };
-        if (currentStatus == INA219_OK)
-            OLED_ShowFormatStr(48, 2, "%4u mA", (unsigned)current);
-        else
-            OLED_ShowFormatStr(48, 2, "%-7s", faultText[currentStatus]);
+        if (pageChanged || currentStatus != lastCurrentStatus ||
+            (refreshReadings && currentStatus == INA219_OK && current != lastCurrent)) {
+            static const char *const faultText[] = {
+                [INA219_LINK_ERROR] = "I2C", [INA219_CONFIG_ERROR] = "CONFIG",
+                [INA219_NOT_READY] = "WAIT", [INA219_OVERFLOW] = "OVF"
+            };
+            if (currentStatus == INA219_OK)
+                OLED_ShowFormatStr(48, 2, "%4u mA", (unsigned)current);
+            else
+                OLED_ShowFormatStr(48, 2, "%-7s", faultText[currentStatus]);
+            lastCurrentStatus = currentStatus;
+            lastCurrent = current;
+        }
 
-    } else {
+        if (pageChanged || temperatureValid != lastTemperatureValid ||
+            (refreshReadings && temperatureValid && degrees != lastTemperature)) {
+            if (temperatureValid) {
+                OLED_ShowFormatStr(48, 4, "%-6d", degrees);
+                OLED_ShowCentigrade(82, 4);
+            } else {
+                OLED_ShowStr(48, 4, (uint8_t *)"ERR   ", 2, 0);
+            }
+            lastTemperature = degrees;
+        }
+    } else if (pageChanged || temperatureValid != lastTemperatureValid) {
         OLED_ShowStr(87, 6, (uint8_t *)(temperatureValid ? "      " : "T:ERR "), 1, 0);
     }
 
-    OLED_ShowStr(0, 6, (uint8_t *)(protectionEnabled ? "P:ON " : "P:OFF"), 1, 0);
-    OLED_ShowStr(45, 6, (uint8_t *)(load ? "L:ON " : "L:OFF"), 1, 0);
+    if (pageChanged || protectionEnabled != lastProtection)
+        OLED_ShowStr(0, 6, (uint8_t *)(protectionEnabled ? "P:ON " : "P:OFF"), 1, 0);
+    if (pageChanged || load != lastLoad)
+        OLED_ShowStr(45, 6, (uint8_t *)(load ? "L:ON " : "L:OFF"), 1, 0);
+    lastTemperatureValid = temperatureValid;
+    lastProtection = protectionEnabled;
+    lastLoad = load;
     last_setn = setn;
 }
 u16 last_currentMax = 0;
