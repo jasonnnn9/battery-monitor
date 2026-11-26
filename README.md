@@ -59,6 +59,18 @@ powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\.vscode\build-gc
 
 当前硬件上已验证蓝板单独连接时 USB DFU 可用，蓝板装在绿板上时使用 ST-LINK。上电后默认显示 BMS 主界面。
 
+## V9 power input options
+
+The carrier's two-pin power header beside the blue latching switch accepts a regulated 5 V supply. Connect the positive lead to `VCC` and the return to `GND`. The board-side connector is a 2.54 mm Dupont female socket or two individual female sockets over the two header pins.
+
+| Option | Connection | Suitable for |
+|---|---|---|
+| DC barrel adapter | 5 V USB-A charger → USB-A-to-barrel cable → matching female barrel jack with screw terminals → male-to-female Dupont leads to the header. Match both barrel dimensions. | Reuses the existing cable and needs no soldering. |
+| USB-C breakout | USB-C charger → C-to-C cable → 5 V sink breakout with a 5.1 kΩ pull-down on each of CC1 and CC2 → `VBUS` and `GND` to the header. | Adds USB-C to the existing carrier. A screw-terminal breakout can be wired without soldering. |
+| Integrated USB-C | Fit a USB-C 5 V input on a future PCB revision and route it to the carrier supply. Include reverse-current protection or source selection if Micro-USB can also be connected. | Provides a fixed, enclosure-mounted connector. |
+
+On the current carrier, unplug the Blue Pill's Micro-USB cable before powering the header. Verify voltage and polarity before connecting the board. The battery under test connects to the measurement circuit and the regulated supply powers the monitor. Start the power check with the battery and load disconnected.
+
 ## 源码入口
 
 | 文件 | 内容 |
@@ -119,6 +131,12 @@ V9 绿板 D1 指示灯与 BUZZER1 共用 VT1 驱动，由 PA11 控制。PCB 网�
 
 电量显示使用有效图标索引和固定宽度百分比，修复满电图标越界与百分号重叠。电量百分比目前仍使用原有电压换算，准确性需另行校准。
 
+### Temperature probe faults and the Blue Pill LED
+
+The DS18B20 driver accepts a sample after detecting a sensor response, waiting for conversion to complete and checking the scratchpad CRC. On a fault, the OLED shows `ERR` on the home page or `T:ERR` in settings. With protection enabled, the relay opens and the V9 alarm runs. After a valid reading returns, the load stays off until it is switched on locally.
+
+The Blue Pill's green LED shares PC13 with the OLED data line. The OLED redraws only changed fields. Normal readings refresh at most once per second, while changes to fault and switch status display immediately. A brief flash during an update or page change is expected. The V9 alarm uses PA11.
+
 ### 设置页期间的监测
 
 每轮主循环先采集电压、电流和温度，再执行保护判断，之后处理按键和显示。主页面和三个设置页都持续采样。启用阈值保护后，设置页也会按当前生效值保护。
@@ -138,3 +156,5 @@ V9 绿板 D1 指示灯与 BUZZER1 共用 VT1 驱动，由 PA11 控制。PCB 网�
 `protection` 可读取或一起修改欠压、过流、过温阈值。本地与云端共用 STM32 中的一份配置。首次启动且没有有效记录时默认值为 2.5 V、180 mA、35 °C。STM32 在 Flash 最后 2 KiB 保存设置，更新应用时应保留这两页及开头的 Maple 引导区。ESP 支持通过 Thinger.io 更新自身固件。操作与验收步骤见 [ESP 使用说明](iot/esp01s/README.md)。
 
 凭据由本机环境变量提供，不上传源码仓库。`build.ps1 -CheckOnly` 生成的占位凭据固件只能检查编译，不能烧录。完整端到端验收应确认有效帧计数递增、云端与 OLED 读数一致、设置页面仍更新及断网期间本地保护正常。
+
+Update the ESP-01S to `bms-control-v1.1.2-ota` before flashing the STM32 probe-fault firmware. The ESP uses Thinger.io OTA, and the assembled STM32 board uses ST-LINK. On a temperature probe fault, Thinger.io reports `temperature_valid=false` and omits `temperature_c` while valid voltage and current readings continue to update. See the [V9 probe disconnect and recovery procedure](iot/esp01s/README.md#串口协议).
