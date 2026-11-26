@@ -210,7 +210,11 @@ void TIM1_IRQHandler(void)
  
 void TIM2_IRQHandler(void)
 {
-	HAL_TIM_IRQHandler(&htim2);
+    if (htim2.Instance != TIM2) {
+        HAL_NVIC_DisableIRQ(TIM2_IRQn);
+        return;
+    }
+    HAL_TIM_IRQHandler(&htim2);
 	
 }
  

@@ -13,6 +13,8 @@
       "compilerArgs": ["-mcpu=cortex-m3", "-mthumb"],
       "includePath": [
         "${workspaceFolder}/Core/Inc",
+        "${workspaceFolder}/Protocol",
+        "${workspaceFolder}/system/Config",
         "${workspaceFolder}/Drivers/STM32F1xx_HAL_Driver/Inc",
         "${workspaceFolder}/Drivers/STM32F1xx_HAL_Driver/Inc/Legacy",
         "${workspaceFolder}/Drivers/CMSIS/Device/ST/STM32F1xx/Include",

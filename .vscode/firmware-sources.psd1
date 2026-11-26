@@ -5,6 +5,8 @@
     )
     Includes = @(
         'Core/Inc'
+        'Protocol'
+        'system/Config'
         'Drivers/STM32F1xx_HAL_Driver/Inc'
         'Drivers/STM32F1xx_HAL_Driver/Inc/Legacy'
         'Drivers/CMSIS/Device/ST/STM32F1xx/Include'
@@ -64,6 +66,7 @@
     )
     Sources = @(
         'Core/Src/main.c'
+        'system/Config/bms_config.c'
         'Core/Src/syscalls.c'
         'Core/Src/stm32f1xx_it.c'
         'Core/Src/stm32f1xx_hal_msp.c'
