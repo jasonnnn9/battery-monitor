@@ -11,6 +11,8 @@
 
 
 
+static volatile uint8_t keysReady;
+
 void KEY_Init(void)
 {
     GPIO_InitTypeDef GPIO_InitStruct;
@@ -42,7 +44,8 @@ void KEY_Init(void)
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;                     
     GPIO_InitStruct.Pull = GPIO_PULLUP;                         
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;               
-    HAL_GPIO_Init(KEY3_GPIO_PORT, &GPIO_InitStruct);            	
+    HAL_GPIO_Init(KEY3_GPIO_PORT, &GPIO_InitStruct);
+    keysReady = 1;
 		
  
  
@@ -80,7 +83,8 @@ float volMax = 2.5;
 uint16_t current = INA219_CURRENT_INVALID;
 uint16_t currentMax = 180;
 
-uint8_t keyNum[4],setn = 0;
+uint8_t setn = 1;
+static uint8_t protectionEnabled;
 enum {
     WARNING_LOW_VOLTAGE = 1u << 0,
     WARNING_HIGH_CURRENT = 1u << 1,
@@ -114,102 +118,105 @@ void GetBatteryCapacity(void)
 
 
 
-void KeyScanHandle(void)
+enum { KEY_DEBOUNCE_MS = 25 };
+
+static volatile uint8_t keyEvents[3];
+
+static void AdvanceSettings(void)
 {
-    if (keyNum[0] == 1)
-    {
-        HAL_Delay(100);
-        if (keyNum[0] == 1)
-        {
-            /* Persist only the setting whose page is being left. */
-            uint8_t result = BMS_ACK_APPLIED;
-            uint32_t mv = (uint32_t)(volMax * 1000.0f + 0.5f);
-            if (setn == 2)
-                result = BmsConfig_Apply((uint32_t)(editVolMax * 1000.0f + 0.5f), currentMax, tempMax);
-            else if (setn == 3)
-                result = BmsConfig_Apply(mv, editCurrentMax, tempMax);
-            else if (setn == 4)
-                result = BmsConfig_Apply(mv, currentMax, editTempMax);
-            if (result != BMS_ACK_APPLIED) {
-                OLED_ShowStr(0, 7, (uint8_t *)"SAVE ERROR", 1, 0);
-                keyNum[0] = 0;
-                return;
-            }
-
-            setn++;
-            if (setn > 4)
-                setn = 1;
-
-            if (setn == 2)
-                editVolMax = volMax;
-            else if (setn == 3)
-                editCurrentMax = currentMax;
-            else if (setn == 4)
-                editTempMax = tempMax;
-
-            CotorFun();
-            OLED_CLS();
-            DISplaysetvalue();
-            keyNum[0] = 0;
-        }
+    uint8_t result = BMS_ACK_APPLIED;
+    uint32_t mv = (uint32_t)(volMax * 1000.0f + 0.5f);
+    if (setn == 2)
+        result = BmsConfig_Apply((uint32_t)(editVolMax * 1000.0f + 0.5f), currentMax, tempMax);
+    else if (setn == 3)
+        result = BmsConfig_Apply(mv, editCurrentMax, tempMax);
+    else if (setn == 4)
+        result = BmsConfig_Apply(mv, currentMax, editTempMax);
+    if (result != BMS_ACK_APPLIED) {
+        OLED_ShowStr(0, 7, (uint8_t *)"SAVE ERROR", 1, 0);
+        return;
     }
 
-    if (keyNum[1] == 1)
-    {
-        HAL_Delay(100);
-        if (keyNum[1] == 1)
-        {
-            if (setn == 2 && editVolMax > 0.5f)
-            { editVolMax -= 0.5f; if (editVolMax < 0.5f) editVolMax = 0.5f; }
-            if (setn == 3 && editCurrentMax > 10)
-            { editCurrentMax = editCurrentMax < 20 ? 10 : editCurrentMax - 10; }
-            if (setn == 4 && editTempMax > 0)
-                editTempMax--;
-            DISplaysetvalue();
-            keyNum[1] = 0;
-        }
-    }
+    setn = setn == 4 ? 1 : setn + 1;
+    if (setn == 2)
+        editVolMax = volMax;
+    else if (setn == 3)
+        editCurrentMax = currentMax;
+    else if (setn == 4)
+        editTempMax = tempMax;
 
-    if (keyNum[2] == 1)
-    {
-        HAL_Delay(100);
-        if (keyNum[2] == 1)
-        {
-            if (setn == 1 && warningFlag == 0)
-            {
-                load = !load;
-                RELAY(load != 0);
-            }
-            if (setn == 2 && editVolMax < 16.5f)
-            { editVolMax += 0.5f; if (editVolMax > 16.5f) editVolMax = 16.5f; }
-            if (setn == 3 && editCurrentMax < 3200)
-            { editCurrentMax = editCurrentMax > 3190 ? 3200 : editCurrentMax + 10; }
-            if (setn == 4 && editTempMax < 99)
-                editTempMax++;
-            DISplaysetvalue();
-            keyNum[2] = 0;
-        }
-    }
+    CotorFun();
+    OLED_CLS();
+    DISplaysetvalue();
+    if (setn != 1)
+        OLED_ShowStr(0, 5, (uint8_t *)"S1- S2 NEXT S3+", 1, 0);
 }
 
-void KeyScan(void) 
+static void AdjustSetting(int direction)
 {
-	if(KEY0 == 0)
-	{
-		keyNum[0] = 1;
-	}
-	if(KEY1 == 0)
-	{
-		keyNum[1] = 1;
-	}
-	if(KEY2 == 0)
-	{
-		keyNum[2]= 1;
-	}
-	if(KEY3 == 0)
-	{
-		keyNum[3]= 1;
-	}
+    if (setn == 2) {
+        editVolMax += direction * 0.5f;
+        if (editVolMax < 0.5f) editVolMax = 0.5f;
+        if (editVolMax > 16.5f) editVolMax = 16.5f;
+    } else if (setn == 3) {
+        int next = editCurrentMax + direction * 10;
+        editCurrentMax = next < 10 ? 10 : next > 3200 ? 3200 : next;
+    } else if (setn == 4) {
+        int next = editTempMax + direction;
+        editTempMax = next < 0 ? 0 : next > 99 ? 99 : next;
+    }
+    DISplaysetvalue();
+}
+
+void KeyScanHandle(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    uint8_t s1 = keyEvents[0];
+    uint8_t s2 = keyEvents[1];
+    uint8_t s3 = keyEvents[2];
+    keyEvents[0] = keyEvents[1] = keyEvents[2] = 0;
+    __set_PRIMASK(primask);
+
+    if (s1 && setn != 1) {
+        AdjustSetting(-1);
+    } else if (s1) {
+        protectionEnabled = !protectionEnabled;
+        CotorFun();
+    }
+
+    if (s3 && setn != 1) {
+        AdjustSetting(1);
+    } else if (s3 && (load || warningFlag == 0)) {
+        load = !load;
+        RELAY(load != 0);
+    }
+
+    if (s2)
+        AdvanceSettings();
+}
+
+void KeyScan(void)
+{
+    static uint8_t lastRaw;
+    static uint8_t stable;
+    static uint32_t changedAt[3];
+    if (!keysReady)
+        return;
+
+    uint32_t now = HAL_GetTick();
+    uint8_t raw = (KEY0 == 0) | ((KEY1 == 0) << 1) | ((KEY2 == 0) << 2);
+    for (unsigned i = 0; i < 3; ++i) {
+        uint8_t bit = 1u << i;
+        if ((raw ^ lastRaw) & bit)
+            changedAt[i] = now;
+        if (!((raw ^ stable) & bit) || now - changedAt[i] < KEY_DEBOUNCE_MS)
+            continue;
+        stable ^= bit;
+        if (!(stable & bit))
+            keyEvents[i] = 1;
+    }
+    lastRaw = raw;
 }
 #endif
 
@@ -298,6 +305,8 @@ void Display(void)
 		
     }
     
+    OLED_ShowStr(0, 6, (uint8_t *)(protectionEnabled ? "P:ON " : "P:OFF"), 1, 0);
+    OLED_ShowStr(45, 6, (uint8_t *)(load ? "L:ON " : "L:OFF"), 1, 0);
     last_setn = setn;
 }
 u16 last_currentMax = 0;
@@ -344,13 +353,13 @@ void DISplaysetvalue(void)
 void CotorFun(void)
 {
     u8 warnings = 0;
-    if (voltage < volMax)
+    if (protectionEnabled && voltage < volMax)
         warnings |= WARNING_LOW_VOLTAGE;
     if (current == INA219_CURRENT_INVALID)
         warnings |= WARNING_CURRENT_SENSOR;
-    else if (current > currentMax)
+    else if (protectionEnabled && current > currentMax)
         warnings |= WARNING_HIGH_CURRENT;
-    if (temperature > tempMax)
+    if (protectionEnabled && temperature > tempMax)
         warnings |= WARNING_HIGH_TEMP;
 
 
