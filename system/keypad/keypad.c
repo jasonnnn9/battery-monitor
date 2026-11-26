@@ -229,13 +229,11 @@ void KeyScan(void)
 u8 last_setn = 0; 
 
 
-static uint16_t batteryAdc;
 static INA219_Status currentStatus = INA219_LINK_ERROR;
 
 void UpdateMeasurements(void)
 {
-    batteryAdc = Get_ADC_B1();
-    voltage = ADC_BatteryVoltageFromRaw(batteryAdc);
+    voltage = ADC_ReadBatteryVoltage();
     if (voltage < 0.1f)
         voltage = 0;
     currentStatus = INA219_ReadSample(INA219_ADDRESS, &current);
@@ -299,9 +297,6 @@ void Display(void)
         else
             OLED_ShowFormatStr(48, 2, "%-7s", faultText[currentStatus]);
 
-        char adcText[12];
-        snprintf(adcText, sizeof adcText, "ADC %4u", (unsigned)batteryAdc);
-        OLED_ShowStr(0, 7, (uint8_t *)adcText, 1, 0);  // 74+16
 		
     }
     
