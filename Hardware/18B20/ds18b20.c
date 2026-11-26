@@ -115,6 +115,7 @@ uint8_t DS18B20_Update(int16_t *temperature)
         }
         WriteByte(0xCC);
         WriteByte(0x44); // Convert T. The V9 sensor has a dedicated VCC pin.
+        delay_ms(1); // Allow the probe to enter conversion before polling its busy bit.
         converting = !ReadBit(); // A conversion must report busy before it reports done.
         startedAt = HAL_GetTick();
         lastActionAt = startedAt;
