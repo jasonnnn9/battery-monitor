@@ -31,6 +31,7 @@ uint16_t Get_ADC_A6(void);
 uint16_t Get_ADC_A7(void);
 uint16_t Get_ADC_B0(void);
 uint16_t Get_ADC_B1(void);
+float ADC_BatteryVoltageFromRaw(uint16_t sample);
 float ADC_ReadBatteryVoltage(void);
 
 void MX_ADC_Init(void);

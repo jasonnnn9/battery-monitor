@@ -9,6 +9,7 @@
 
 
 #include "main.h"
+#include "bms_config.h"
 extern uint8_t data_index;
 
 int main(void)
@@ -17,6 +18,7 @@ int main(void)
     HAL_Init();
     SystemClock_Config(RCC_PLL_MUL9);
     delay_init(72);
+    BmsConfig_Init();
 
      
     MX_IIC_Init();
@@ -37,16 +39,13 @@ int main(void)
     while (1)
     {
 			
-			  KeyScanHandle();	
+			  UpdateMeasurements();
+              CotorFun();
+              KeyScanHandle();
 			  Display();	
 				
-        if(setn == 1)
-        {
-					
-            CotorFun();
-            UsartSendReceiveData();
-            UsartReceive();
-        }
+        UsartReceive();
+        UsartSendReceiveData();
         
 
 #if(WDT_RUN)

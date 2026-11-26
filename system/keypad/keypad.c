@@ -1,5 +1,7 @@
 #include "main.h"
 #include "keypad.h"
+#include "bms_config.h"
+#include "bms_control.h"
 
 #if(button_Set)
 
@@ -8,6 +10,8 @@
 
 
 
+
+static volatile uint8_t keysReady;
 
 void KEY_Init(void)
 {
@@ -40,7 +44,8 @@ void KEY_Init(void)
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;                     
     GPIO_InitStruct.Pull = GPIO_PULLUP;                         
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;               
-    HAL_GPIO_Init(KEY3_GPIO_PORT, &GPIO_InitStruct);            	
+    HAL_GPIO_Init(KEY3_GPIO_PORT, &GPIO_InitStruct);
+    keysReady = 1;
 		
  
  
@@ -78,16 +83,18 @@ float volMax = 2.5;
 uint16_t current = INA219_CURRENT_INVALID;
 uint16_t currentMax = 180;
 
-uint8_t keyNum[4],setn = 0;
-enum {
-    WARNING_LOW_VOLTAGE = 1u << 0,
-    WARNING_HIGH_CURRENT = 1u << 1,
-    WARNING_HIGH_TEMP = 1u << 2,
-    WARNING_CURRENT_SENSOR = 1u << 3
-};
-u8 mode = 0, warningFlag = WARNING_CURRENT_SENSOR, load = 0, led = 0;
-uint8_t temperature=25;
+uint8_t setn = 1;
+static uint8_t protectionEnabled;
+uint8_t loadBlocked = 1;
+u8 mode = 0, load = 0, led = 0;
+volatile u8 warningFlag = BMS_WARNING_CURRENT_SENSOR | BMS_WARNING_TEMPERATURE_SENSOR;
+int16_t temperatureDeciC;
+static uint8_t temperatureValid;
 uint8_t tempMax = 35;
+
+static float editVolMax;
+static uint16_t editCurrentMax;
+static uint8_t editTempMax;
 char display[16]; 
 uint8_t data_index = 0;
 char str[50];
@@ -107,84 +114,105 @@ void GetBatteryCapacity(void)
 
 
 
-void KeyScanHandle(void)   
+enum { KEY_DEBOUNCE_MS = 25 };
+
+static volatile uint8_t keyEvents[3];
+
+static void AdvanceSettings(void)
 {
-	 if(keyNum[0] == 1)  
-	 {
-		HAL_Delay(100);
-		if(keyNum[0] == 1)
-		{
-			setn ++;
-			if(setn <= 4)
-			{
-				OLED_CLS(); 
-				DISplaysetvalue();
-			}else{
-				setn = 1;
-				OLED_CLS();     
-			}
-			keyNum[0] = 0;
-		}
-	 }
-	 if(keyNum[1] == 1)  
-	 {
-		HAL_Delay(100);
-		if(keyNum[1] == 1)
-		{
-			if(setn == 2 && volMax < 25)volMax+=0.5;
-			if(setn == 3 && currentMax< 3200)currentMax+=10;
-			if(setn == 4 && tempMax < 99)tempMax++;
-			DISplaysetvalue();    
-			keyNum[1] = 0;
-		}
-	 }
-	 if(keyNum[2] == 1)  
-	 {
-		HAL_Delay(100);
-		if(keyNum[2] == 1)
-		{
-			if(setn == 1 && (warningFlag == 0))
-			{
-				HAL_Delay(50);
-				load = !load;
-				if(load == 0)
-				{
-				RELAY(OFF);
-				LED(0);	
-				}
-				else
-				{
-				RELAY(ON);
-				LED(1);	
-				}					
-			}
-			if(setn == 2 && volMax > 0.5)volMax-=0.5;
-			if(setn == 3 && currentMax > 10)currentMax-=10;
-			if(setn == 4 && tempMax > 0)tempMax--;
-			DISplaysetvalue();
-				keyNum[2] = 0;
-		}
-	 }
+    uint8_t result = BMS_ACK_APPLIED;
+    uint32_t mv = (uint32_t)(volMax * 1000.0f + 0.5f);
+    if (setn == 2)
+        result = BmsConfig_Apply((uint32_t)(editVolMax * 1000.0f + 0.5f), currentMax, tempMax);
+    else if (setn == 3)
+        result = BmsConfig_Apply(mv, editCurrentMax, tempMax);
+    else if (setn == 4)
+        result = BmsConfig_Apply(mv, currentMax, editTempMax);
+    if (result != BMS_ACK_APPLIED) {
+        OLED_ShowStr(0, 7, (uint8_t *)"SAVE ERROR", 1, 0);
+        return;
+    }
+
+    setn = setn == 4 ? 1 : setn + 1;
+    if (setn == 2)
+        editVolMax = volMax;
+    else if (setn == 3)
+        editCurrentMax = currentMax;
+    else if (setn == 4)
+        editTempMax = tempMax;
+
+    CotorFun();
+    OLED_CLS();
+    DISplaysetvalue();
+    if (setn != 1)
+        OLED_ShowStr(0, 5, (uint8_t *)"S1- S2 NEXT S3+", 1, 0);
 }
 
-void KeyScan(void) 
+static void AdjustSetting(int direction)
 {
-	if(KEY0 == 0)
-	{
-		keyNum[0] = 1;
-	}
-	if(KEY1 == 0)
-	{
-		keyNum[1] = 1;
-	}
-	if(KEY2 == 0)
-	{
-		keyNum[2]= 1;
-	}
-	if(KEY3 == 0)
-	{
-		keyNum[3]= 1;
-	}
+    if (setn == 2) {
+        editVolMax += direction * 0.5f;
+        if (editVolMax < 0.5f) editVolMax = 0.5f;
+        if (editVolMax > 16.5f) editVolMax = 16.5f;
+    } else if (setn == 3) {
+        int next = editCurrentMax + direction * 10;
+        editCurrentMax = next < 10 ? 10 : next > 3200 ? 3200 : next;
+    } else if (setn == 4) {
+        int next = editTempMax + direction;
+        editTempMax = next < 0 ? 0 : next > 99 ? 99 : next;
+    }
+    DISplaysetvalue();
+}
+
+void KeyScanHandle(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    uint8_t s1 = keyEvents[0];
+    uint8_t s2 = keyEvents[1];
+    uint8_t s3 = keyEvents[2];
+    keyEvents[0] = keyEvents[1] = keyEvents[2] = 0;
+    __set_PRIMASK(primask);
+
+    if (s1 && setn != 1) {
+        AdjustSetting(-1);
+    } else if (s1) {
+        protectionEnabled = !protectionEnabled;
+        CotorFun();
+    }
+
+    if (s3 && setn != 1) {
+        AdjustSetting(1);
+    } else if (s3 && (load || !loadBlocked)) {
+        load = !load;
+        RELAY(load != 0);
+    }
+
+    if (s2)
+        AdvanceSettings();
+}
+
+void KeyScan(void)
+{
+    static uint8_t lastRaw;
+    static uint8_t stable;
+    static uint32_t changedAt[3];
+    if (!keysReady)
+        return;
+
+    uint32_t now = HAL_GetTick();
+    uint8_t raw = (KEY0 == 0) | ((KEY1 == 0) << 1) | ((KEY2 == 0) << 2);
+    for (unsigned i = 0; i < 3; ++i) {
+        uint8_t bit = 1u << i;
+        if ((raw ^ lastRaw) & bit)
+            changedAt[i] = now;
+        if (!((raw ^ stable) & bit) || now - changedAt[i] < KEY_DEBOUNCE_MS)
+            continue;
+        stable ^= bit;
+        if (!(stable & bit))
+            keyEvents[i] = 1;
+    }
+    lastRaw = raw;
 }
 #endif
 
@@ -193,78 +221,98 @@ void KeyScan(void)
 
 
 
-u16 last_current = 0;
+
 u8 last_setn = 0; 
 
 
+static INA219_Status currentStatus = INA219_LINK_ERROR;
+
+void UpdateMeasurements(void)
+{
+    voltage = ADC_ReadBatteryVoltage();
+    if (voltage < 0.1f)
+        voltage = 0;
+    currentStatus = INA219_ReadSample(INA219_ADDRESS, &current);
+    temperatureValid = DS18B20_Update(&temperatureDeciC);
+    GetBatteryCapacity();
+}
+
 void Display(void)
 {
-    if(setn == 1)
-    {
-			
-			
-        voltage = ADC_ReadBatteryVoltage();
-				GetBatteryCapacity();				
-				OLED_ShowStr(0, 4, (uint8_t *)"Temp:", 2, 0);
-				OLED_ShowNum(48,4,temperature,2,0);
-				OLED_ShowCentigrade(70,4);
-			
-        OLED_ShowStr(0, 0, (uint8_t *)"Volt:", 2, 0);
-				if(voltage < 0.1f)voltage=0;	
-				OLED_ShowFormatStr(48, 0, "%-5.2f", voltage);
-			
-        OLED_ShowChar(90,0,'V',2,0);
+    static char lastVoltageText[8];
+    static uint32_t lastReadingsAt;
+    static uint16_t lastCurrent;
+    static INA219_Status lastCurrentStatus;
+    static int lastTemperature;
+    static uint8_t lastTemperatureValid, lastCapacity, lastProtection, lastLoad;
+    uint8_t pageChanged = setn != last_setn;
+    uint32_t now = HAL_GetTick();
 
-											 
-					OLED_ShowStr(84, 7, (uint8_t *)"     ", 1, 0);
-
-					 
-					if(elQuantity == 100)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 5);
-					}
-					else if(elQuantity >= 93)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 0);
-					}
-					else if(elQuantity >= 71)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 1);
-					}
-					else if(elQuantity >= 41)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 2);
-					}
-					else if(elQuantity >= 21)
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 3);
-					}
-					else
-					{
-							OLED_DrawBMP(84, 7, 100, 8, 4);
-					}
-
-					 
-					OLED_ShowNum(103, 7, elQuantity, 1, 0);
-					OLED_ShowChar(119, 7, '%', 1, 0);
-							
-        current = INA219_ReadCurrent_mA(INA219_ADDRESS);
-        OLED_ShowStr(0, 2, (uint8_t *)"Curr:", 2, 0);
-        if (current != last_current || last_setn != 1)
-        {
-            if (current == INA219_CURRENT_INVALID)
-                OLED_ShowStr(48, 2, (uint8_t *)" ERR", 2, 0);
-            else
-                OLED_ShowFormatStr(48, 2, "%4u", (unsigned)current);
-            last_current = current;
+    if (setn == 1) {
+        int degrees = temperatureDeciC / 10;
+        if (pageChanged) {
+            OLED_ShowStr(0, 0, (uint8_t *)"Volt:", 2, 0);
+            OLED_ShowChar(90, 0, 'V', 2, 0);
+            OLED_ShowStr(0, 2, (uint8_t *)"Curr:", 2, 0);
+            OLED_ShowStr(0, 4, (uint8_t *)"Temp:", 2, 0);
         }
 
-				OLED_ShowChar(80, 2, 'm', 2, 0);  // 64+16
-				OLED_ShowChar(90, 2, 'A', 2, 0);  // 74+16
-		
-       temperature = DS18B20_Get_Temp()/10;
+        uint8_t refreshReadings = pageChanged || now - lastReadingsAt >= 1000u;
+        if (refreshReadings) {
+            char voltageText[sizeof lastVoltageText];
+            snprintf(voltageText, sizeof voltageText, "%-5.2f", voltage);
+            if (pageChanged || strcmp(voltageText, lastVoltageText) != 0) {
+                OLED_ShowStr(48, 0, (uint8_t *)voltageText, 2, 0);
+                strcpy(lastVoltageText, voltageText);
+            }
+
+            if (pageChanged || elQuantity != lastCapacity) {
+                unsigned icon = elQuantity >= 93 ? 0 : elQuantity >= 71 ? 1 :
+                    elQuantity >= 41 ? 2 : elQuantity >= 21 ? 3 : 4;
+                OLED_DrawBMP(84, 7, 100, 8, icon);
+                char batteryText[5];
+                snprintf(batteryText, sizeof batteryText, "%3u%%", (unsigned)elQuantity);
+                OLED_ShowStr(103, 7, (uint8_t *)batteryText, 1, 0);
+                lastCapacity = elQuantity;
+            }
+            lastReadingsAt = now;
+        }
+
+        if (pageChanged || currentStatus != lastCurrentStatus ||
+            (refreshReadings && currentStatus == INA219_OK && current != lastCurrent)) {
+            static const char *const faultText[] = {
+                [INA219_LINK_ERROR] = "I2C", [INA219_CONFIG_ERROR] = "CONFIG",
+                [INA219_NOT_READY] = "WAIT", [INA219_OVERFLOW] = "OVF"
+            };
+            if (currentStatus == INA219_OK)
+                OLED_ShowFormatStr(48, 2, "%4u mA", (unsigned)current);
+            else
+                OLED_ShowFormatStr(48, 2, "%-7s", faultText[currentStatus]);
+            lastCurrentStatus = currentStatus;
+            lastCurrent = current;
+        }
+
+        if (pageChanged || temperatureValid != lastTemperatureValid ||
+            (refreshReadings && temperatureValid && degrees != lastTemperature)) {
+            if (temperatureValid) {
+                OLED_ShowFormatStr(48, 4, "%-6d", degrees);
+                OLED_ShowCentigrade(82, 4);
+            } else {
+                OLED_ShowStr(48, 4, (uint8_t *)"ERR   ", 2, 0);
+            }
+            lastTemperature = degrees;
+        }
+    } else if (pageChanged || temperatureValid != lastTemperatureValid) {
+        OLED_ShowStr(87, 6, (uint8_t *)(temperatureValid ? "      " : "T:ERR "), 1, 0);
     }
-    
+
+    if (pageChanged || protectionEnabled != lastProtection)
+        OLED_ShowStr(0, 6, (uint8_t *)(protectionEnabled ? "P:ON " : "P:OFF"), 1, 0);
+    if (pageChanged || load != lastLoad)
+        OLED_ShowStr(45, 6, (uint8_t *)(load ? "L:ON " : "L:OFF"), 1, 0);
+    lastTemperatureValid = temperatureValid;
+    lastProtection = protectionEnabled;
+    lastLoad = load;
     last_setn = setn;
 }
 u16 last_currentMax = 0;
@@ -273,28 +321,28 @@ void DISplaysetvalue(void)
 	if(setn == 2) 
 	{
 		OLED_ShowStr(0, 0, (uint8_t *)"Low Voltage", 2, 0);
-		OLED_ShowFormatStr(44, 3, "%.1f", volMax);
+		OLED_ShowFormatStr(44, 3, "%.1f", editVolMax);
 	  OLED_ShowChar(80,3,'V', 2,0);
 	}		
 	if(setn == 3)
 	{
 		OLED_ShowStr(0, 0, (uint8_t *)"High Current", 2, 0);
-		if(currentMax != last_currentMax || last_setn != 3)
+		if(editCurrentMax != last_currentMax || last_setn != 3)
 		{		
 			OLED_ShowChar(44,3,' ',2,0);
 			OLED_ShowChar(54,3,' ',2,0);
 			OLED_ShowChar(64,3,' ',2,0);
 			OLED_ShowChar(74,3,' ',2,0);
 			
-			if(currentMax>=1000)OLED_ShowNum(44,3,currentMax/1000,2,0);
-			if(currentMax>=100) OLED_ShowNum(54,3,(currentMax%1000)/100,2,0);
-			if(currentMax>=10)  OLED_ShowNum(64,3,(currentMax%100)/10,2,0);
-			                   OLED_ShowNum(74,3,currentMax%10,2,0);	
+			if(editCurrentMax>=1000)OLED_ShowNum(44,3,editCurrentMax/1000,2,0);
+			if(editCurrentMax>=100) OLED_ShowNum(54,3,(editCurrentMax%1000)/100,2,0);
+			if(editCurrentMax>=10)  OLED_ShowNum(64,3,(editCurrentMax%100)/10,2,0);
+			                   OLED_ShowNum(74,3,editCurrentMax%10,2,0);
 			
 			OLED_ShowChar(84,3,'m',2,0);
 			OLED_ShowChar(94,3,'A',2,0);
 			
-			last_currentMax = currentMax;
+			last_currentMax = editCurrentMax;
 			
 		}
 	}	
@@ -302,7 +350,7 @@ void DISplaysetvalue(void)
 		if(setn == 4) 
 	{
 		OLED_ShowStr(0, 0, (uint8_t *)"High Temp", 2, 0);
-		OLED_ShowNum(44,3,tempMax,2,0);
+		OLED_ShowNum(44,3,editTempMax,2,0);
 		OLED_ShowCentigrade(80,3);
 	}		
 	
@@ -310,26 +358,28 @@ void DISplaysetvalue(void)
 
 void CotorFun(void)
 {
-    if (setn != 1)
-        return;
-
-    warningFlag = 0;
-    if (voltage < volMax)
-        warningFlag |= WARNING_LOW_VOLTAGE;
+    u8 warnings = 0;
+    if (protectionEnabled && voltage < volMax)
+        warnings |= BMS_WARNING_LOW_VOLTAGE;
     if (current == INA219_CURRENT_INVALID)
-        warningFlag |= WARNING_CURRENT_SENSOR;
-    else if (current > currentMax)
-        warningFlag |= WARNING_HIGH_CURRENT;
-    if (temperature > tempMax)
-        warningFlag |= WARNING_HIGH_TEMP;
+        warnings |= BMS_WARNING_CURRENT_SENSOR;
+    else if (protectionEnabled && current > currentMax)
+        warnings |= BMS_WARNING_HIGH_CURRENT;
+    if (!temperatureValid)
+        warnings |= BMS_WARNING_TEMPERATURE_SENSOR;
+    else if (protectionEnabled && temperatureDeciC > tempMax * 10)
+        warnings |= BMS_WARNING_HIGH_TEMP;
 
-    if (warningFlag)
+
+    warningFlag = warnings;
+    warnings = bms_relay_blocking_warnings(warnings, protectionEnabled);
+    loadBlocked = warnings != 0;
+    if (loadBlocked)
     {
         RELAY(OFF);
-        LED(0);
         load = 0;
     }
-    RELAY1((warningFlag & WARNING_HIGH_TEMP) != 0);
-    if (warningFlag & (WARNING_LOW_VOLTAGE | WARNING_HIGH_CURRENT | WARNING_HIGH_TEMP))
-        BEEP_DOING();
+    RELAY1((warnings & BMS_WARNING_HIGH_TEMP) != 0);
+    Buzzer_SetAlarm(warnings & (BMS_WARNING_LOW_VOLTAGE | BMS_WARNING_HIGH_CURRENT |
+                               BMS_WARNING_HIGH_TEMP | BMS_WARNING_TEMPERATURE_SENSOR));
 }

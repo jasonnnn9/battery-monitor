@@ -3,7 +3,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot
 $app = Join-Path $root 'build-gcc\Demo_f103C8T6-usb.bin'
 $data = [IO.File]::ReadAllBytes($app)
-if ($data.Length -lt 8 -or $data.Length -gt 0xE000) { throw 'Invalid USB application size.' }
+# The last 2 KiB hold the STM32 protection settings.
+if ($data.Length -lt 8 -or $data.Length -gt 0xD800) { throw 'Expected an application of 8 bytes to 54 KiB.' }
 $reset = [BitConverter]::ToUInt32($data, 4)
 if ($reset -lt 0x08002000 -or $reset -ge (0x08002000 + $data.Length) -or !($reset -band 1)) {
     throw 'Expected the application linked at 0x08002000.'

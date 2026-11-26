@@ -1,6 +1,8 @@
 #include "main.h"
 #include "timer.h"
 
+
+
 TIM_HandleTypeDef htim1,htim2,htim3,htim4;
 uint8_t UR1_flg,UR2_flg,UR3_flg,UR4_flg;
 uint16_t timer1_flag_1;
@@ -208,7 +210,11 @@ void TIM1_IRQHandler(void)
  
 void TIM2_IRQHandler(void)
 {
-	HAL_TIM_IRQHandler(&htim2);
+    if (htim2.Instance != TIM2) {
+        HAL_NVIC_DisableIRQ(TIM2_IRQn);
+        return;
+    }
+    HAL_TIM_IRQHandler(&htim2);
 	
 }
  
@@ -254,6 +260,8 @@ void timer_1_handle(void)
 
 void timer_2_handle(void)
 {
+    /* Keep alarm cadence independent of foreground display and UART work. */
+    Buzzer_Update();
 	 timer2_flag_1=1;
 		KeyScan();
 }
